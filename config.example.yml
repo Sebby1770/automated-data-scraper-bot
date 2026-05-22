@@ -1,0 +1,83 @@
+# Copy to config.yml and tune sources/rules for your own watchlist.
+#
+# Respect each site's robots.txt and terms before scraping. Prefer official APIs
+# or RSS feeds when a site provides them.
+
+settings:
+  runIntervalSeconds: 300
+  userAgent: "AutomatedDataScraperBot/0.1 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  requestTimeoutMs: 12000
+  maxConcurrency: 4
+  stateTtlDays: 30
+
+notifiers:
+  - type: console
+    enabled: true
+  - type: discord
+    enabled: false
+    webhookUrlEnv: DISCORD_WEBHOOK_URL
+  - type: telegram
+    enabled: false
+    botTokenEnv: TELEGRAM_BOT_TOKEN
+    chatIdEnv: TELEGRAM_CHAT_ID
+
+sources:
+  - id: tsla-stock
+    type: stooq
+    label: "TSLA quote"
+    symbol: tsla.us
+
+  - id: retail-demo-books
+    type: html
+    label: "Retail demo watch"
+    url: "https://books.toscrape.com/catalogue/category/books/travel_2/index.html"
+    itemSelector: "article.product_pod"
+    baseUrl: "https://books.toscrape.com/catalogue/category/books/travel_2/"
+    idFields: ["title", "url"]
+    fields:
+      title:
+        selector: "h3 a"
+        attr: "title"
+      url:
+        selector: "h3 a"
+        attr: "href"
+        transform: absolute_url
+      price:
+        selector: ".price_color"
+        transform: price
+      stockText:
+        selector: ".availability"
+        transform: text
+
+  - id: housing-rss-demo
+    type: rss
+    label: "Housing RSS watch"
+    url: "https://www.housingwire.com/feed/"
+
+rules:
+  - name: "TSLA under target"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: "<="
+        value: 180
+    message: "{{symbol}} is trading at {{price}}. Rule: TSLA under target."
+
+  - name: "Retail item below budget"
+    source: retail-demo-books
+    all:
+      - field: price
+        operator: "<="
+        value: 35
+    message: "{{title}} is {{price}}: {{url}}"
+
+  - name: "Housing article keyword"
+    source: housing-rss-demo
+    any:
+      - field: title
+        operator: contains
+        value: Melbourne
+      - field: summary
+        operator: contains
+        value: affordable
+    message: "{{title}} {{url}}"
