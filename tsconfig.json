@@ -9,8 +9,17 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": ".",
+    "jsx": "react-jsx",
     "resolveJsonModule": true,
     "types": ["node", "vitest/globals"]
   },
-  "include": ["api/**/*.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts", "eslint.config.js"]
+  "include": [
+    "api/**/*.ts",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "tests/**/*.ts",
+    "vite.config.ts",
+    "vitest.config.ts",
+    "eslint.config.js"
+  ]
 }

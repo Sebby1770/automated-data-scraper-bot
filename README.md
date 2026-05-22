@@ -1,11 +1,12 @@
 # Automated Data Scraper Bot
 
-Config-driven bot for watching retail listings, housing feeds, and stock quotes, then notifying you through Discord or Telegram when a rule matches.
+Config-driven bot and visual dashboard for watching retail listings, housing feeds, and stock quotes, then notifying you through Discord or Telegram when a rule matches.
 
-It can run locally as a long-lived process or as a protected Vercel Cron endpoint.
+It can run as a web app, a local long-lived process, or a protected Vercel Cron endpoint.
 
 ## What It Does
 
+- Opens a dashboard for sources, rules, notifier readiness, and manual scrape runs.
 - Scrapes HTML pages with CSS selectors for retail or marketplace-style listings.
 - Reads RSS feeds for housing/news-style sources.
 - Pulls stock quote snapshots from Stooq's public CSV endpoint.
@@ -18,23 +19,47 @@ It can run locally as a long-lived process or as a protected Vercel Cron endpoin
 
 ```bash
 npm install
-npm run scrape:once
+npm run dev
 ```
 
-Create your own config:
+Then open:
+
+`http://localhost:5173`
+
+Run the bot without the dashboard:
 
 ```bash
 npm run scrape:once -- --dry-run
-npm run build
 ```
 
-To make a real editable config:
+Create your own editable config:
 
 ```bash
 npx tsx src/index.ts init
 ```
 
 Then edit `config.yml`.
+
+## Visual Dashboard
+
+```bash
+npm run dev
+```
+
+The dashboard calls the local API routes:
+
+```text
+GET  /api/config
+POST /api/run
+```
+
+Manual runs default to dry-run mode, which shows matching alerts without sending Discord or Telegram notifications. Switch to live alerts in the dashboard when you want notification adapters to send.
+
+To protect manual runs on a deployed dashboard, set:
+
+```bash
+DASHBOARD_SECRET=your-long-random-secret
+```
 
 ## Notifications
 
@@ -87,6 +112,7 @@ Set these environment variables in Vercel:
 
 ```bash
 CRON_SECRET=your-long-random-secret
+DASHBOARD_SECRET=optional-dashboard-secret
 CONFIG_PATH=config.example.yml
 DISCORD_WEBHOOK_URL=...
 ```
@@ -121,6 +147,9 @@ Check each target site's terms and robots.txt. Prefer official APIs, feeds, or e
 ## Scripts
 
 ```bash
+npm run dev
+npm run app:build
+npm run app:start
 npm run scrape:once
 npm run scrape:watch
 npm run typecheck
@@ -131,7 +160,11 @@ npm run build
 ## Project Layout
 
 ```text
+src/web/                React dashboard
+src/server.ts           Local dashboard/API server
 api/cron/scrape.ts      Vercel Cron endpoint
+api/config.ts           Dashboard config endpoint
+api/run.ts              Manual scrape endpoint
 src/sources/            HTML, RSS, and stock source adapters
 src/rules.ts            Criteria engine and alert rendering
 src/notifiers/          Console, Discord, Telegram adapters

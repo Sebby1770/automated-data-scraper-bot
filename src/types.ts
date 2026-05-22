@@ -123,4 +123,5 @@ export interface RunSummary {
   matchedCount: number;
   alertCount: number;
   errors: string[];
+  alerts?: Alert[];
 }

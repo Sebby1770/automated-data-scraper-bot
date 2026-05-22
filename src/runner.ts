@@ -7,6 +7,7 @@ import { createStateStore, type StateStore } from "./state/index.js";
 
 export interface RunOptions {
   dryRun?: boolean;
+  includeAlerts?: boolean;
   stateStore?: StateStore;
   notifiers?: Notifier[];
 }
@@ -58,7 +59,8 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     itemCount: items.length,
     matchedCount: matches.length,
     alertCount: alerts.length,
-    errors
+    errors,
+    ...(options.includeAlerts ? { alerts } : {})
   };
 }
 

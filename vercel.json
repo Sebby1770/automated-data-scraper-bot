@@ -1,4 +1,6 @@
 {
+  "buildCommand": "npm run app:build",
+  "outputDirectory": "dist/client",
   "crons": [
     {
       "path": "/api/cron/scrape",
@@ -7,6 +9,9 @@
   ],
   "functions": {
     "api/cron/scrape.ts": {
+      "maxDuration": 60
+    },
+    "api/run.ts": {
       "maxDuration": 60
     }
   }
