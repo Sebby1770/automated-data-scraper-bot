@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { loadConfig } from "./config.js";
 import { runOnce } from "./runner.js";
+import { createMemoryPriceHistoryStore } from "./state/price-history.js";
 import { MemoryStateStore } from "./state/memory.js";
 import type { BotConfig, NotifierConfig, RunSummary, SourceConfig } from "./types.js";
 
@@ -33,7 +34,11 @@ export interface DashboardNotifier {
 export interface DashboardConfig {
   loadedAt: string;
   secured: boolean;
-  settings: BotConfig["settings"];
+  settings: BotConfig["settings"] & {
+    digestMode: boolean;
+    priceHistoryFields: string[];
+    anomalyThresholdPercent: number;
+  };
   sources: DashboardSource[];
   rules: DashboardRule[];
   notifiers: DashboardNotifier[];
@@ -51,7 +56,12 @@ export function getDashboardConfig(configPath?: string): DashboardConfig {
   return {
     loadedAt: new Date().toISOString(),
     secured: Boolean(process.env.DASHBOARD_SECRET),
-    settings: config.settings,
+    settings: {
+      ...config.settings,
+      digestMode: config.settings.digestMode ?? false,
+      priceHistoryFields: config.settings.priceHistoryFields ?? ["price"],
+      anomalyThresholdPercent: config.settings.anomalyThresholdPercent ?? 20
+    },
     sources: config.sources.map(summarizeSource),
     rules: config.rules.map((rule) => ({
       name: rule.name,
@@ -71,7 +81,8 @@ export async function runDashboardScrape(options: { configPath?: string; dryRun?
   const summary = await runOnce(config, {
     dryRun,
     includeAlerts: true,
-    stateStore: dryRun ? new MemoryStateStore() : undefined
+    stateStore: dryRun ? new MemoryStateStore() : undefined,
+    priceHistoryStore: dryRun ? createMemoryPriceHistoryStore() : undefined
   });
 
   return {

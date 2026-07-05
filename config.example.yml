@@ -5,10 +5,13 @@
 
 settings:
   runIntervalSeconds: 300
-  userAgent: "AutomatedDataScraperBot/0.1 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  userAgent: "AutomatedDataScraperBot/0.4 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
   requestTimeoutMs: 12000
   maxConcurrency: 4
   stateTtlDays: 30
+  digestMode: false
+  priceHistoryFields: ["price"]
+  anomalyThresholdPercent: 20
 
 notifiers:
   - type: console

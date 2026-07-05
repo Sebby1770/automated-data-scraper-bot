@@ -4,13 +4,19 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer as createViteServer } from "vite";
 import {
+  digestPreviewResponse,
   getConfigResponse,
   getConfigValidationResponse,
   getHealthResponse,
+  parseNlRuleResponse,
   readDashboardSecret,
   runScrapeResponse,
+  sandboxTestResponse,
   testNotifierResponse,
   type DashboardRequestBody,
+  type DigestPreviewRequestBody,
+  type NlRuleRequestBody,
+  type SandboxTestRequestBody,
   type TestNotifierRequestBody
 } from "./api.js";
 
@@ -61,6 +67,30 @@ app.post(
     }
   }
 );
+
+app.post("/api/nl-rules/parse", (request: Request<Record<string, never>, unknown, NlRuleRequestBody>, response) => {
+  try {
+    response.json(parseNlRuleResponse(request.body ?? { text: "" }));
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.post("/api/sandbox/test", (request: Request<Record<string, never>, unknown, SandboxTestRequestBody>, response) => {
+  try {
+    response.json(sandboxTestResponse(request.body ?? { sample: "", sampleType: "json", ruleName: "" }));
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.post("/api/digest/preview", (request: Request<Record<string, never>, unknown, DigestPreviewRequestBody>, response) => {
+  try {
+    response.json(digestPreviewResponse(request.body ?? { alerts: [] }));
+  } catch (error) {
+    sendError(response, error);
+  }
+});
 
 if (isProduction) {
   const clientDir = resolve(root, "dist/client");

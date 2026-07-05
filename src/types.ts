@@ -8,6 +8,9 @@ export interface BotSettings {
   requestTimeoutMs: number;
   maxConcurrency: number;
   stateTtlDays: number;
+  digestMode?: boolean;
+  priceHistoryFields?: string[];
+  anomalyThresholdPercent?: number;
 }
 
 export interface BaseSourceConfig {
@@ -116,6 +119,21 @@ export interface DataItem {
   data: DataRecord;
 }
 
+export interface PriceTrend {
+  field: string;
+  history: Array<{ value: number; timestamp: string }>;
+  changePercent?: number;
+  direction?: "up" | "down" | "flat";
+}
+
+export interface AlertAnomaly {
+  field: string;
+  current: number;
+  average: number;
+  deviationPercent: number;
+  explanation: string;
+}
+
 export interface Alert {
   id: string;
   ruleName: string;
@@ -126,6 +144,8 @@ export interface Alert {
   message: string;
   item: DataItem;
   matchedAt: string;
+  anomaly?: AlertAnomaly;
+  priceHistory?: PriceTrend;
 }
 
 export interface SourceHealth {
@@ -134,6 +154,16 @@ export interface SourceHealth {
   lastFetchAt: string;
   itemCount: number;
   error?: string;
+}
+
+export interface PriceHistorySummary {
+  updated: number;
+  entries: Array<{
+    sourceId: string;
+    itemId: string;
+    field: string;
+    history: Array<{ value: number; timestamp: string }>;
+  }>;
 }
 
 export interface RunSummary {
@@ -146,4 +176,6 @@ export interface RunSummary {
   errors: string[];
   sourceHealth?: SourceHealth[];
   alerts?: Alert[];
+  digestMode?: boolean;
+  priceHistory?: PriceHistorySummary;
 }

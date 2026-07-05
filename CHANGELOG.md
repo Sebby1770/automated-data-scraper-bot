@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.4.0] - 2026-07-05
+
+### Added
+
+- Natural language rule parser (`src/nl-rules.ts`) with dashboard "Describe a rule" panel and `POST /api/nl-rules/parse`
+- Price history tracker (`src/state/price-history.ts`) storing the last 30 numeric snapshots per item
+- Sparkline charts and price trend indicators (↑ ↓ →) in dashboard alert output
+- Digest mode (`src/digest.ts`) via `settings.digestMode: true` to batch alerts into one summary per notifier
+- Dashboard digest preview via `POST /api/digest/preview`
+- Rule sandbox (`src/sandbox.ts`) with dashboard modal and `POST /api/sandbox/test`
+- Anomaly detection (`src/anomaly.ts`) flagging numeric fields that deviate >20% from historical average
+- MCP stdio server (`src/mcp-server.ts`) exposing `run_scrape`, `list_sources`, `list_rules`, and `get_health`
+- `npm run mcp` script for Claude Desktop / Cursor integration
+- Tests for NL rules, price history, anomalies, digest, and sandbox
+
+### Changed
+
+- Bumped package version to `0.4.0`
+- `RunSummary` now includes `priceHistory` updates and `digestMode`
+- Alerts can include `anomaly` and `priceHistory` metadata for dashboard badges and sparklines
+- Updated README with v0.4.0 features, badges, and MCP usage
+
 ## [0.3.0] - 2026-07-05
 
 ### Added

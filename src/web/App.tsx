@@ -9,8 +9,10 @@ import {
   Database,
   Download,
   ExternalLink,
+  FlaskConical,
   History,
   Loader2,
+  MessageSquare,
   Play,
   RefreshCw,
   Rss,
@@ -67,6 +69,21 @@ interface DashboardConfig {
   cronSchedule?: string;
 }
 
+interface AlertAnomaly {
+  field: string;
+  current: number;
+  average: number;
+  deviationPercent: number;
+  explanation: string;
+}
+
+interface PriceTrend {
+  field: string;
+  history: Array<{ value: number; timestamp: string }>;
+  changePercent?: number;
+  direction?: "up" | "down" | "flat";
+}
+
 interface AlertItem {
   id: string;
   ruleName: string;
@@ -75,6 +92,8 @@ interface AlertItem {
   url?: string;
   message: string;
   matchedAt: string;
+  anomaly?: AlertAnomaly;
+  priceHistory?: PriceTrend;
 }
 
 interface SourceHealth {
@@ -95,6 +114,7 @@ interface RunSummary {
   errors: string[];
   sourceHealth?: SourceHealth[];
   alerts?: AlertItem[];
+  digestMode?: boolean;
 }
 
 interface ConfigValidationResult {
@@ -167,6 +187,13 @@ export function App() {
     message: ""
   });
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const [nlRuleText, setNlRuleText] = useState("alert when price is below 50");
+  const [nlRuleYaml, setNlRuleYaml] = useState<string | null>(null);
+  const [nlRuleError, setNlRuleError] = useState<string | null>(null);
+  const [nlParsing, setNlParsing] = useState(false);
+  const [sandboxOpen, setSandboxOpen] = useState(false);
+  const [digestPreview, setDigestPreview] = useState<string | null>(null);
+  const [digestPreviewing, setDigestPreviewing] = useState(false);
 
   const readyNotifiers = useMemo(() => config?.notifiers.filter((notifier) => notifier.ready).length ?? 0, [config]);
   const lastRunMs = useMemo(() => {
@@ -295,6 +322,74 @@ export function App() {
     setTimeout(() => setCopyStatus(null), 2500);
   }
 
+  async function parseNlRule() {
+    setNlParsing(true);
+    setNlRuleError(null);
+    setNlRuleYaml(null);
+
+    try {
+      const response = await fetch("/api/nl-rules/parse", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          text: nlRuleText,
+          source: ruleDraft.source || config?.sources[0]?.id,
+          name: ruleDraft.name || "Natural language rule"
+        })
+      });
+      const payload = (await response.json()) as ApiResponse<{ parsed?: unknown; yaml?: string; error?: string }>;
+      if (!payload.ok) {
+        throw new Error(payload.error ?? "NL parse failed");
+      }
+      if (payload.data?.error) {
+        setNlRuleError(payload.data.error);
+        return;
+      }
+      setNlRuleYaml(payload.data?.yaml ?? null);
+    } catch (caught) {
+      setNlRuleError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setNlParsing(false);
+    }
+  }
+
+  async function copyNlRuleYaml() {
+    if (!nlRuleYaml) {
+      return;
+    }
+    await navigator.clipboard.writeText(nlRuleYaml);
+    setCopyStatus("Natural language rule YAML copied");
+    setTimeout(() => setCopyStatus(null), 2500);
+  }
+
+  async function previewDigest() {
+    const alerts = runResult?.summary.alerts ?? [];
+    if (alerts.length === 0) {
+      setDigestPreview("No alerts to preview. Run a scrape first.");
+      return;
+    }
+
+    setDigestPreviewing(true);
+    try {
+      const response = await fetch("/api/digest/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          alerts: alerts.map((alert) => ({ ruleName: alert.ruleName, title: alert.title }))
+        })
+      });
+      const payload = (await response.json()) as ApiResponse<{ message: string }>;
+      if (!payload.ok || !payload.data) {
+        throw new Error(payload.error ?? "Digest preview failed");
+      }
+      setDigestPreview(payload.data.message);
+    } catch (caught) {
+      setDigestPreview(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setDigestPreviewing(false);
+    }
+  }
+
   const isBusy = status === "loading" || status === "running" || validating;
 
   useEffect(() => {
@@ -352,6 +447,10 @@ export function App() {
           <button className="secondary-button" type="button" onClick={() => setRuleBuilderOpen(true)} disabled={!config}>
             <Wand2 size={16} aria-hidden="true" />
             Rule builder
+          </button>
+          <button className="secondary-button" type="button" onClick={() => setSandboxOpen(true)} disabled={!config}>
+            <FlaskConical size={16} aria-hidden="true" />
+            Rule sandbox
           </button>
           <button className="icon-button" type="button" title="Refresh config" onClick={refreshConfig} disabled={isBusy}>
             <RefreshCw size={18} aria-hidden="true" />
@@ -483,15 +582,46 @@ export function App() {
           <RunHistoryPanel history={runHistory} />
         </div>
 
+        <div className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Natural Language Rules</h2>
+              <p>Describe a rule in plain English and copy the YAML</p>
+            </div>
+            <MessageSquare size={18} aria-hidden="true" />
+          </div>
+          <NlRulePanel
+            text={nlRuleText}
+            yaml={nlRuleYaml}
+            error={nlRuleError}
+            parsing={nlParsing}
+            onTextChange={setNlRuleText}
+            onParse={parseNlRule}
+            onCopy={copyNlRuleYaml}
+          />
+        </div>
+
         <div className="panel result-panel" data-testid="run-results">
           <div className="panel-heading">
             <div>
               <h2>Run Output</h2>
-              <p>{runResult ? (runResult.dryRun ? "Dry run" : "Live alerts") : "No run yet"}</p>
+              <p>
+                {runResult
+                  ? `${runResult.dryRun ? "Dry run" : "Live alerts"}${runResult.summary.digestMode ? " · digest mode" : ""}`
+                  : "No run yet"}
+              </p>
             </div>
-            {runResult ? <StatusPill ok={runResult.summary.errors.length === 0} /> : null}
+            <div className="panel-heading-actions">
+              {runResult && (runResult.summary.alerts?.length ?? 0) > 0 ? (
+                <button className="secondary-button compact-button" type="button" onClick={previewDigest} disabled={digestPreviewing}>
+                  {digestPreviewing ? <Loader2 className="spin" size={14} aria-hidden="true" /> : null}
+                  Digest preview
+                </button>
+              ) : null}
+              {runResult ? <StatusPill ok={runResult.summary.errors.length === 0} /> : null}
+            </div>
           </div>
-          <RunOutput result={runResult} />
+          <RunOutput result={runResult} digestPreview={digestPreview} />
         </div>
       </section>
 
@@ -503,6 +633,10 @@ export function App() {
           onClose={() => setRuleBuilderOpen(false)}
           onCopy={copyRuleYaml}
         />
+      ) : null}
+
+      {sandboxOpen ? (
+        <SandboxModal rules={config?.rules ?? []} onClose={() => setSandboxOpen(false)} />
       ) : null}
     </main>
   );
@@ -811,7 +945,192 @@ function RunHistoryPanel({ history }: { history: RunHistoryEntry[] }) {
   );
 }
 
-function RunOutput({ result }: { result: RunResult | null }) {
+function NlRulePanel({
+  text,
+  yaml,
+  error,
+  parsing,
+  onTextChange,
+  onParse,
+  onCopy
+}: {
+  text: string;
+  yaml: string | null;
+  error: string | null;
+  parsing: boolean;
+  onTextChange: (value: string) => void;
+  onParse: () => void;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="nl-rule-panel">
+      <label className="nl-rule-label">
+        Describe a rule
+        <textarea
+          value={text}
+          onChange={(event) => onTextChange(event.target.value)}
+          placeholder='e.g. "alert when price is below 50" or "notify if title contains apartment"'
+          rows={3}
+        />
+      </label>
+      <div className="nl-rule-actions">
+        <button className="secondary-button" type="button" onClick={onParse} disabled={parsing}>
+          {parsing ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Wand2 size={16} aria-hidden="true" />}
+          Preview parsed rule
+        </button>
+        {yaml ? (
+          <button className="primary-button" type="button" onClick={onCopy}>
+            <ClipboardCopy size={16} aria-hidden="true" />
+            Copy YAML
+          </button>
+        ) : null}
+      </div>
+      {error ? <div className="nl-rule-error">{error}</div> : null}
+      {yaml ? <pre className="yaml-preview">{yaml}</pre> : null}
+    </div>
+  );
+}
+
+function SandboxModal({ rules, onClose }: { rules: DashboardRule[]; onClose: () => void }) {
+  const [sampleType, setSampleType] = useState<"json" | "html">("json");
+  const [sample, setSample] = useState('{\n  "title": "Travel guide",\n  "price": 20\n}');
+  const [ruleName, setRuleName] = useState(rules[0]?.name ?? "");
+  const [result, setResult] = useState<{
+    matched: boolean;
+    extractedFields: Record<string, unknown>;
+    conditions: Array<{ field: string; operator: string; value?: unknown; actual?: unknown; passed: boolean }>;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  async function runSandboxTest() {
+    setTesting(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await fetch("/api/sandbox/test", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sample, sampleType, ruleName })
+      });
+      const payload = (await response.json()) as ApiResponse<typeof result>;
+      if (!payload.ok || !payload.data) {
+        throw new Error(payload.error ?? "Sandbox test failed");
+      }
+      setResult(payload.data);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="modal-panel wide-modal" role="dialog" aria-modal="true" aria-labelledby="sandbox-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <h2 id="sandbox-title">Rule Sandbox</h2>
+            <p>Paste sample JSON or HTML and test whether a configured rule matches.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close sandbox" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="sandbox-form">
+          <label>
+            Sample type
+            <select value={sampleType} onChange={(event) => setSampleType(event.target.value as "json" | "html")}>
+              <option value="json">JSON</option>
+              <option value="html">HTML</option>
+            </select>
+          </label>
+          <label>
+            Rule
+            <select value={ruleName} onChange={(event) => setRuleName(event.target.value)}>
+              {rules.map((rule) => (
+                <option key={rule.name} value={rule.name}>
+                  {rule.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="full-width">
+            Sample content
+            <textarea value={sample} onChange={(event) => setSample(event.target.value)} rows={8} />
+          </label>
+        </div>
+
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            Close
+          </button>
+          <button className="primary-button" type="button" onClick={runSandboxTest} disabled={testing || !ruleName}>
+            {testing ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <FlaskConical size={16} aria-hidden="true" />}
+            Test rule
+          </button>
+        </div>
+
+        {error ? <div className="sandbox-error">{error}</div> : null}
+
+        {result ? (
+          <div className="sandbox-result">
+            <StatusPill ok={result.matched} label={result.matched ? "Matched" : "No match"} />
+            <pre className="yaml-preview">{JSON.stringify(result.extractedFields, null, 2)}</pre>
+            <div className="condition-grid">
+              {result.conditions.map((condition) => (
+                <div className={`condition-row ${condition.passed ? "pass" : "fail"}`} key={`${condition.field}-${condition.operator}`}>
+                  <strong>
+                    {condition.field} {condition.operator} {String(condition.value ?? "")}
+                  </strong>
+                  <span>
+                    actual: {String(condition.actual ?? "—")} · {condition.passed ? "passed" : "failed"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function PriceSparkline({ trend }: { trend: PriceTrend }) {
+  const width = 88;
+  const height = 28;
+  const values = trend.history.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const points = values
+    .map((value, index) => {
+      const x = (index / Math.max(values.length - 1, 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${x},${y}`;
+    })
+    .join(" ");
+
+  const trendLabel =
+    trend.direction === "up" ? "↑" : trend.direction === "down" ? "↓" : "→";
+  const changeLabel =
+    trend.changePercent !== undefined ? `${trend.changePercent > 0 ? "+" : ""}${trend.changePercent}%` : "";
+
+  return (
+    <div className="sparkline-wrap" title={`${trend.field} trend`}>
+      <svg className="sparkline" viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true">
+        <polyline fill="none" stroke="currentColor" strokeWidth="2" points={points} />
+      </svg>
+      <span className={`trend-indicator trend-${trend.direction ?? "flat"}`}>
+        {trendLabel} {changeLabel}
+      </span>
+    </div>
+  );
+}
+
+function RunOutput({ result, digestPreview }: { result: RunResult | null; digestPreview: string | null }) {
   if (!result) {
     return <EmptyState label="Waiting for first run" />;
   }
@@ -867,14 +1186,23 @@ function RunOutput({ result }: { result: RunResult | null }) {
         </div>
       ) : null}
 
+      {digestPreview ? <pre className="digest-preview">{digestPreview}</pre> : null}
+
       {alerts.length > 0 ? (
         <div className="alert-list">
           {alerts.map((alert) => (
             <article className="alert-item" key={alert.id}>
               <div>
-                <span>{alert.ruleName}</span>
+                <div className="alert-meta">
+                  <span>{alert.ruleName}</span>
+                  {alert.anomaly ? <span className="anomaly-badge">Anomaly · {alert.anomaly.deviationPercent}%</span> : null}
+                </div>
                 <strong>{alert.title}</strong>
                 <p>{alert.message}</p>
+                {alert.anomaly ? <small className="anomaly-copy">{alert.anomaly.explanation}</small> : null}
+                {alert.priceHistory && alert.priceHistory.history.length >= 2 ? (
+                  <PriceSparkline trend={alert.priceHistory} />
+                ) : null}
               </div>
               {alert.url ? (
                 <a href={alert.url} target="_blank" rel="noreferrer" title="Open alert target">

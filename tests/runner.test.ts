@@ -23,7 +23,10 @@ describe("runOnce", () => {
         userAgent: "test",
         requestTimeoutMs: 1000,
         maxConcurrency: 1,
-        stateTtlDays: 30
+        stateTtlDays: 30,
+        digestMode: false,
+        priceHistoryFields: ["price"],
+        anomalyThresholdPercent: 20
       },
       notifiers: [{ type: "console", enabled: false }],
       sources: [

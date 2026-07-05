@@ -1,14 +1,22 @@
 # Automated Data Scraper Bot
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
+[![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
+![Version](https://img.shields.io/badge/version-0.4.0-teal)
+![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
 Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, or Slack when a rule matches.
 
-It can run as a web app, a local long-lived process, a Docker container, or a protected Vercel Cron endpoint.
+It can run as a web app, a local long-lived process, a Docker container, a protected Vercel Cron endpoint, or an MCP tool server for Claude Desktop / Cursor.
 
 ## What It Does
 
 - Opens a dashboard for sources, rules, notifier readiness, config validation, and manual scrape runs.
+- Parses natural-language rule phrases into YAML (`alert when price is below 50`).
+- Tracks price history and flags anomalies when values deviate sharply from recent averages.
+- Shows sparkline charts and trend indicators in alert output.
+- Batches alerts into digest summaries when `digestMode` is enabled.
+- Tests rules against pasted JSON/HTML samples in the Rule Sandbox.
 - Scrapes HTML pages with CSS selectors for retail or marketplace-style listings.
 - Reads RSS feeds for housing/news-style sources.
 - Pulls stock quote snapshots from Stooq's public CSV endpoint.
@@ -18,6 +26,7 @@ It can run as a web app, a local long-lived process, a Docker container, or a pr
 - Sends alerts to console, Discord webhooks, Telegram bots, or Slack incoming webhooks.
 - Retries HTTP requests with exponential backoff.
 - Supports persistent local state or Upstash Redis REST state for serverless deployments.
+- Exposes MCP tools for programmatic control from AI assistants.
 
 ## Quick Start
 
@@ -58,10 +67,18 @@ GET  /api/config/validate
 GET  /api/health
 POST /api/run
 POST /api/test-notifier
+POST /api/nl-rules/parse
+POST /api/sandbox/test
+POST /api/digest/preview
 ```
 
-Dashboard highlights in v0.3.0:
+Dashboard highlights in v0.4.0:
 
+- **Natural language rules** — describe a rule in English, preview parsed YAML, copy to clipboard
+- **Rule sandbox** — paste JSON/HTML, pick a rule, see extracted fields and pass/fail conditions
+- **Price sparklines** — mini SVG charts with ↑ ↓ → trend indicators on alerts with history
+- **Anomaly badges** — highlights items where numeric fields deviate >20% from recent averages
+- **Digest preview** — preview batched alert summaries before enabling `digestMode` in config
 - **Validate config** button — surfaces warnings/errors before you run
 - **Rule builder** modal — compose a rule and copy YAML to your clipboard
 - **Notifier test** buttons — send a test alert to Discord, Telegram, or Slack
@@ -79,6 +96,84 @@ To protect manual runs and notifier tests on a deployed dashboard, set:
 ```bash
 DASHBOARD_SECRET=your-long-random-secret
 ```
+
+## Natural Language Rules
+
+Type phrases like:
+
+```text
+alert when price is below 50
+notify if title contains apartment
+warn when summary exists
+```
+
+The dashboard parser extracts `field`, `operator`, and `value`, then generates YAML you can paste into `config.yml`.
+
+## Digest Mode
+
+Batch alerts into one summary per notifier instead of sending immediately:
+
+```yaml
+settings:
+  digestMode: true
+```
+
+Use the dashboard **Digest preview** button after a run to see the formatted summary.
+
+## Price History & Anomalies
+
+```yaml
+settings:
+  priceHistoryFields: ["price"]
+  anomalyThresholdPercent: 20
+```
+
+Each run records numeric snapshots (last 30 points per item). Alerts include sparklines and anomaly badges when a tracked field deviates sharply from its recent average.
+
+## Rule Sandbox
+
+Open **Rule sandbox** in the dashboard, paste sample JSON or HTML, choose a configured rule, and inspect:
+
+- extracted field values
+- per-condition pass/fail results
+- overall match verdict
+
+## MCP Server
+
+Run the stdio MCP server:
+
+```bash
+npm run mcp
+```
+
+Exposed tools:
+
+| Tool | Description |
+|------|-------------|
+| `run_scrape` | Execute one scrape pass (`dryRun` optional) |
+| `list_sources` | List configured sources |
+| `list_rules` | List configured alert rules |
+| `get_health` | Return version and uptime |
+
+### Claude Desktop
+
+Add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "data-scraper-bot": {
+      "command": "npm",
+      "args": ["run", "mcp"],
+      "cwd": "/absolute/path/to/automated-data-scraper-bot"
+    }
+  }
+}
+```
+
+### Cursor
+
+Add an MCP server entry pointing at `npm run mcp` in the project directory. Set `CONFIG_PATH` if you use a custom config file.
 
 ## Notifications
 
@@ -215,7 +310,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.3.0",
+    "version": "0.4.0",
     "uptime": 12.34
   }
 }
@@ -233,6 +328,7 @@ Returns warnings (missing env vars, empty rules) and errors (invalid references,
 
 ```bash
 npm run dev
+npm run mcp
 npm run app:build
 npm run app:start
 npm run scrape:once
@@ -248,6 +344,12 @@ npm run build
 ```text
 src/web/                React dashboard
 src/server.ts           Local dashboard/API server
+src/mcp-server.ts       MCP stdio tool server
+src/nl-rules.ts         Natural language rule parser
+src/digest.ts           Digest batching and formatting
+src/sandbox.ts          Rule sandbox evaluator
+src/anomaly.ts          Anomaly detection helpers
+src/state/price-history.ts  Numeric field history store
 api/cron/scrape.ts      Vercel Cron endpoint
 api/config.ts           Dashboard config endpoint
 api/config/validate.ts  Config validation endpoint

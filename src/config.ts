@@ -16,7 +16,10 @@ const settingsSchema = z
     userAgent: z.string().min(1).default("AutomatedDataScraperBot/0.1"),
     requestTimeoutMs: z.number().int().positive().default(12000),
     maxConcurrency: z.number().int().positive().default(4),
-    stateTtlDays: z.number().int().positive().default(30)
+    stateTtlDays: z.number().int().positive().default(30),
+    digestMode: z.boolean().default(false),
+    priceHistoryFields: z.array(z.string().min(1)).default(["price"]),
+    anomalyThresholdPercent: z.number().positive().default(20)
   })
   .default({});
 
