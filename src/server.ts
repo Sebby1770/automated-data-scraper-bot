@@ -3,7 +3,13 @@ import express, { type Request, type Response } from "express";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { createServer as createViteServer } from "vite";
-import { getConfigResponse, readDashboardSecret, runScrapeResponse, type DashboardRequestBody } from "./api.js";
+import {
+  getConfigResponse,
+  getHealthResponse,
+  readDashboardSecret,
+  runScrapeResponse,
+  type DashboardRequestBody
+} from "./api.js";
 
 const root = process.cwd();
 const port = Number(process.env.PORT ?? 5173);
@@ -13,7 +19,7 @@ const app = express();
 app.use(express.json());
 
 app.get("/api/health", (_request, response) => {
-  response.json({ ok: true });
+  response.json(getHealthResponse());
 });
 
 app.get("/api/config", (_request, response) => {

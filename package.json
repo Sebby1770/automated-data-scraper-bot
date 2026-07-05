@@ -1,6 +1,6 @@
 {
   "name": "automated-data-scraper-bot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Config-driven bot that watches retail, housing, and stock data sources and sends Telegram or Discord alerts when rules match.",
   "type": "module",
   "private": false,

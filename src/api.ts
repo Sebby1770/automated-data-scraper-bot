@@ -1,6 +1,13 @@
 import type { DashboardRunResult } from "./dashboard.js";
 import { getDashboardConfig, isDashboardAuthorized, runDashboardScrape } from "./dashboard.js";
 
+export const APP_VERSION = "0.2.0";
+
+export interface HealthResponse {
+  version: string;
+  uptime: number;
+}
+
 export interface DashboardRequestBody {
   dryRun?: boolean;
 }
@@ -25,6 +32,16 @@ export function getConfigResponse(): DashboardApiResponse<ReturnType<typeof getD
   return {
     ok: true,
     data: getDashboardConfig(process.env.CONFIG_PATH)
+  };
+}
+
+export function getHealthResponse(): DashboardApiResponse<HealthResponse> {
+  return {
+    ok: true,
+    data: {
+      version: APP_VERSION,
+      uptime: process.uptime()
+    }
   };
 }
 

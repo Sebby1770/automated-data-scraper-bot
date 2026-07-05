@@ -5,7 +5,9 @@ import {
   CheckCircle2,
   Clock3,
   Database,
+  Download,
   ExternalLink,
+  History,
   Loader2,
   Play,
   RefreshCw,
@@ -15,7 +17,7 @@ import {
   ShoppingBag,
   TrendingUp
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SourceType = "html" | "rss" | "stooq";
 type NotifierType = "console" | "discord" | "telegram";
@@ -91,6 +93,21 @@ interface RunResult {
   summary: RunSummary;
 }
 
+interface RunHistoryEntry {
+  id: string;
+  startedAt: string;
+  finishedAt: string;
+  dryRun: boolean;
+  durationMs: number;
+  itemCount: number;
+  matchedCount: number;
+  alertCount: number;
+  errorCount: number;
+}
+
+const RUN_HISTORY_KEY = "scraperRunHistory";
+const MAX_RUN_HISTORY = 10;
+
 const sourceIcons: Record<SourceType, typeof ShoppingBag> = {
   html: ShoppingBag,
   rss: Rss,
@@ -106,10 +123,12 @@ const sourceTone: Record<SourceType, string> = {
 export function App() {
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [runHistory, setRunHistory] = useState<RunHistoryEntry[]>(() => loadRunHistory());
   const [status, setStatus] = useState<"idle" | "loading" | "running">("loading");
   const [error, setError] = useState<string | null>(null);
   const [dryRun, setDryRun] = useState(true);
   const [secret, setSecret] = useState(() => window.localStorage.getItem("dashboardSecret") ?? "");
+  const [ruleFilter, setRuleFilter] = useState("");
 
   const readyNotifiers = useMemo(() => config?.notifiers.filter((notifier) => notifier.ready).length ?? 0, [config]);
   const lastRunMs = useMemo(() => {
@@ -119,6 +138,19 @@ export function App() {
 
     return new Date(runResult.summary.finishedAt).getTime() - new Date(runResult.summary.startedAt).getTime();
   }, [runResult]);
+
+  const filteredRules = useMemo(() => {
+    const rules = config?.rules ?? [];
+    const query = ruleFilter.trim().toLowerCase();
+    if (!query) {
+      return rules;
+    }
+
+    return rules.filter((rule) => {
+      const haystack = [rule.name, rule.source, rule.message ?? ""].join(" ").toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [config?.rules, ruleFilter]);
 
   useEffect(() => {
     void refreshConfig();
@@ -142,7 +174,7 @@ export function App() {
     }
   }
 
-  async function runScrape() {
+  const runScrape = useCallback(async () => {
     setStatus("running");
     setError(null);
     window.localStorage.setItem("dashboardSecret", secret);
@@ -160,15 +192,34 @@ export function App() {
       if (!payload.ok || !payload.data) {
         throw new Error(payload.error ?? "Scrape failed");
       }
+
       setRunResult(payload.data);
+      const entry = createHistoryEntry(payload.data);
+      setRunHistory((previous) => {
+        const nextHistory = [entry, ...previous].slice(0, MAX_RUN_HISTORY);
+        saveRunHistory(nextHistory);
+        return nextHistory;
+      });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setStatus("idle");
     }
-  }
+  }, [dryRun, secret]);
 
   const isBusy = status === "loading" || status === "running";
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.ctrlKey && event.key === "Enter" && !isBusy) {
+        event.preventDefault();
+        void runScrape();
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isBusy, runScrape]);
 
   return (
     <main className="app-shell">
@@ -209,7 +260,7 @@ export function App() {
           <button className="icon-button" type="button" title="Refresh config" onClick={refreshConfig} disabled={isBusy}>
             <RefreshCw size={18} aria-hidden="true" />
           </button>
-          <button className="primary-button" type="button" onClick={runScrape} disabled={isBusy}>
+          <button className="primary-button" type="button" onClick={runScrape} disabled={isBusy} title="Run scrape (Ctrl+Enter)">
             {status === "running" ? <Loader2 className="spin" size={18} aria-hidden="true" /> : <Play size={18} aria-hidden="true" />}
             Run Scrape
           </button>
@@ -227,7 +278,13 @@ export function App() {
         <Metric icon={Database} label="Sources" value={config?.sources.length ?? "—"} accent="teal" />
         <Metric icon={Search} label="Rules" value={config?.rules.length ?? "—"} accent="blue" />
         <Metric icon={Bell} label="Ready Notifiers" value={`${readyNotifiers}/${config?.notifiers.length ?? 0}`} accent="rose" />
-        <Metric icon={Clock3} label="Last Run" value={lastRunMs === undefined ? "Not run" : `${lastRunMs} ms`} accent="amber" />
+        <Metric
+          icon={Clock3}
+          label="Last Run"
+          value={runResult ? formatDuration(lastRunMs ?? 0) : "Not run"}
+          detail={runResult ? formatTimestamp(runResult.summary.finishedAt) : undefined}
+          accent="amber"
+        />
       </section>
 
       <section className="workspace-grid">
@@ -255,10 +312,35 @@ export function App() {
           <div className="panel-heading">
             <div>
               <h2>Rules</h2>
-              <p>{config ? `${config.settings.maxConcurrency} concurrent source checks` : "Waiting for config"}</p>
+              <p>
+                {config
+                  ? `${filteredRules.length} of ${config.rules.length} rules · ${config.settings.maxConcurrency} concurrent checks`
+                  : "Waiting for config"}
+              </p>
             </div>
+            <label className="filter-field">
+              <Search size={16} aria-hidden="true" />
+              <input
+                aria-label="Filter rules"
+                type="search"
+                placeholder="Filter rules…"
+                value={ruleFilter}
+                onChange={(event) => setRuleFilter(event.target.value)}
+              />
+            </label>
           </div>
-          <RuleTable rules={config?.rules ?? []} />
+          <RuleTable rules={filteredRules} />
+        </div>
+
+        <div className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Run History</h2>
+              <p>Last {MAX_RUN_HISTORY} runs stored locally</p>
+            </div>
+            <History size={18} aria-hidden="true" />
+          </div>
+          <RunHistoryPanel history={runHistory} />
         </div>
 
         <div className="panel result-panel" data-testid="run-results">
@@ -280,6 +362,7 @@ function Metric(props: {
   icon: typeof Database;
   label: string;
   value: string | number;
+  detail?: string;
   accent: "teal" | "blue" | "rose" | "amber";
 }) {
   const Icon = props.icon;
@@ -288,6 +371,7 @@ function Metric(props: {
       <Icon size={20} aria-hidden="true" />
       <span>{props.label}</span>
       <strong>{props.value}</strong>
+      {props.detail ? <small className="metric-detail">{props.detail}</small> : null}
     </div>
   );
 }
@@ -336,7 +420,7 @@ function SourceTable({ sources }: { sources: DashboardSource[] }) {
 
 function RuleTable({ rules }: { rules: DashboardRule[] }) {
   if (rules.length === 0) {
-    return <EmptyState label="No rules loaded" />;
+    return <EmptyState label="No rules match the current filter" />;
   }
 
   return (
@@ -390,20 +474,74 @@ function NotifierList({ notifiers }: { notifiers: DashboardNotifier[] }) {
   );
 }
 
+function RunHistoryPanel({ history }: { history: RunHistoryEntry[] }) {
+  if (history.length === 0) {
+    return <EmptyState label="No runs recorded yet" />;
+  }
+
+  return (
+    <div className="history-list">
+      {history.map((entry) => (
+        <div className="history-row" key={entry.id}>
+          <div>
+            <strong>{formatTimestamp(entry.finishedAt)}</strong>
+            <span>
+              {entry.dryRun ? "Dry run" : "Live"} · {formatDuration(entry.durationMs)} · {entry.alertCount} alerts
+            </span>
+          </div>
+          <span className={`history-pill ${entry.errorCount > 0 ? "warn" : "ok"}`}>
+            {entry.errorCount > 0 ? `${entry.errorCount} errors` : "Clean"}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function RunOutput({ result }: { result: RunResult | null }) {
   if (!result) {
     return <EmptyState label="Waiting for first run" />;
   }
 
   const alerts = result.summary.alerts ?? [];
+  const durationMs =
+    new Date(result.summary.finishedAt).getTime() - new Date(result.summary.startedAt).getTime();
 
   return (
     <div className="run-output">
+      <div className="run-meta">
+        <div>
+          <span>Started</span>
+          <strong>{formatTimestamp(result.summary.startedAt)}</strong>
+        </div>
+        <div>
+          <span>Finished</span>
+          <strong>{formatTimestamp(result.summary.finishedAt)}</strong>
+        </div>
+        <div>
+          <span>Duration</span>
+          <strong>{formatDuration(durationMs)}</strong>
+        </div>
+      </div>
+
       <div className="summary-strip">
         <span>{result.summary.itemCount} items</span>
         <span>{result.summary.matchedCount} matches</span>
         <span>{result.summary.alertCount} alerts</span>
       </div>
+
+      {alerts.length > 0 ? (
+        <div className="export-row">
+          <button className="export-button" type="button" onClick={() => downloadAlertsJson(alerts, result.summary.finishedAt)}>
+            <Download size={16} aria-hidden="true" />
+            Export JSON
+          </button>
+          <button className="export-button" type="button" onClick={() => downloadAlertsCsv(alerts, result.summary.finishedAt)}>
+            <Download size={16} aria-hidden="true" />
+            Export CSV
+          </button>
+        </div>
+      ) : null}
 
       {result.summary.errors.length > 0 ? (
         <div className="error-list">
@@ -451,4 +589,92 @@ function StatusPill({ ok, label }: { ok: boolean; label?: string }) {
 
 function EmptyState({ label }: { label: string }) {
   return <div className="empty-state">{label}</div>;
+}
+
+function loadRunHistory(): RunHistoryEntry[] {
+  try {
+    const raw = window.localStorage.getItem(RUN_HISTORY_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw) as RunHistoryEntry[];
+    return Array.isArray(parsed) ? parsed.slice(0, MAX_RUN_HISTORY) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRunHistory(history: RunHistoryEntry[]): void {
+  window.localStorage.setItem(RUN_HISTORY_KEY, JSON.stringify(history));
+}
+
+function createHistoryEntry(result: RunResult): RunHistoryEntry {
+  const durationMs =
+    new Date(result.summary.finishedAt).getTime() - new Date(result.summary.startedAt).getTime();
+
+  return {
+    id: `${result.summary.startedAt}-${result.summary.finishedAt}`,
+    startedAt: result.summary.startedAt,
+    finishedAt: result.summary.finishedAt,
+    dryRun: result.dryRun,
+    durationMs,
+    itemCount: result.summary.itemCount,
+    matchedCount: result.summary.matchedCount,
+    alertCount: result.summary.alertCount,
+    errorCount: result.summary.errors.length
+  };
+}
+
+function formatTimestamp(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "medium"
+  }).format(new Date(value));
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms} ms`;
+  }
+
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(1)} s`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.round(seconds % 60);
+  return `${minutes}m ${remainder}s`;
+}
+
+function downloadAlertsJson(alerts: AlertItem[], finishedAt: string): void {
+  const stamp = finishedAt.replace(/[:.]/g, "-");
+  downloadFile(`alerts-${stamp}.json`, JSON.stringify(alerts, null, 2), "application/json");
+}
+
+function downloadAlertsCsv(alerts: AlertItem[], finishedAt: string): void {
+  const headers = ["id", "ruleName", "sourceLabel", "title", "url", "message", "matchedAt"];
+  const rows = alerts.map((alert) =>
+    headers.map((header) => csvEscape(String(alert[header as keyof AlertItem] ?? ""))).join(",")
+  );
+  const stamp = finishedAt.replace(/[:.]/g, "-");
+  downloadFile(`alerts-${stamp}.csv`, [headers.join(","), ...rows].join("\n"), "text/csv");
+}
+
+function csvEscape(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+function downloadFile(filename: string, content: string, mimeType: string): void {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

@@ -50,8 +50,17 @@ The dashboard calls the local API routes:
 
 ```text
 GET  /api/config
+GET  /api/health
 POST /api/run
 ```
+
+Dashboard highlights in v0.2.0:
+
+- Run history panel (last 10 runs, stored in browser `localStorage` as `scraperRunHistory`)
+- Export matched alerts as JSON or CSV
+- Rules table search/filter
+- `Ctrl+Enter` to run a scrape
+- Prominent run timestamps and duration in the output panel
 
 Manual runs default to dry-run mode, which shows matching alerts without sending Discord or Telegram notifications. Switch to live alerts in the dashboard when you want notification adapters to send.
 
@@ -144,6 +153,24 @@ settings:
 
 Check each target site's terms and robots.txt. Prefer official APIs, feeds, or export endpoints when they exist. Keep intervals reasonable and identify your bot with a clear user agent.
 
+## Health Check
+
+```bash
+curl http://localhost:5173/api/health
+```
+
+Example response:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "version": "0.2.0",
+    "uptime": 12.34
+  }
+}
+```
+
 ## Scripts
 
 ```bash
@@ -153,6 +180,7 @@ npm run app:start
 npm run scrape:once
 npm run scrape:watch
 npm run typecheck
+npm run lint
 npm test
 npm run build
 ```
@@ -164,6 +192,7 @@ src/web/                React dashboard
 src/server.ts           Local dashboard/API server
 api/cron/scrape.ts      Vercel Cron endpoint
 api/config.ts           Dashboard config endpoint
+api/health.ts           Health/version endpoint
 api/run.ts              Manual scrape endpoint
 src/sources/            HTML, RSS, and stock source adapters
 src/rules.ts            Criteria engine and alert rendering
