@@ -1,0 +1,56 @@
+# Retail-focused watch profile — demo bookstore with budget and price-change rules.
+
+settings:
+  runIntervalSeconds: 600
+  userAgent: "AutomatedDataScraperBot/0.5 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  requestTimeoutMs: 12000
+  maxConcurrency: 2
+  stateTtlDays: 14
+  priceHistoryFields: ["price"]
+  anomalyThresholdPercent: 25
+
+notifiers:
+  - type: console
+    enabled: true
+  - type: discord
+    enabled: false
+    webhookUrlEnv: DISCORD_WEBHOOK_URL
+
+sources:
+  - id: retail-demo-books
+    type: html
+    label: "Retail demo watch"
+    url: "https://books.toscrape.com/catalogue/category/books/travel_2/index.html"
+    itemSelector: "article.product_pod"
+    baseUrl: "https://books.toscrape.com/catalogue/category/books/travel_2/"
+    idFields: ["title", "url"]
+    fields:
+      title:
+        selector: "h3 a"
+        attr: "title"
+      url:
+        selector: "h3 a"
+        attr: "href"
+        transform: absolute_url
+      price:
+        selector: ".price_color"
+        transform: price
+      stockText:
+        selector: ".availability"
+        transform: text
+
+rules:
+  - name: "Retail item below budget"
+    source: retail-demo-books
+    all:
+      - field: price
+        operator: "<="
+        value: 35
+    message: "{{title}} is {{price}}: {{url}}"
+
+  - name: "Retail price increased"
+    source: retail-demo-books
+    all:
+      - field: price
+        operator: increased
+    message: "{{title}} price increased to {{price}}: {{url}}"

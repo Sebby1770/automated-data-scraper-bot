@@ -5,13 +5,17 @@
 
 settings:
   runIntervalSeconds: 300
-  userAgent: "AutomatedDataScraperBot/0.4 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  userAgent: "AutomatedDataScraperBot/0.5 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
   requestTimeoutMs: 12000
   maxConcurrency: 4
   stateTtlDays: 30
   digestMode: false
   priceHistoryFields: ["price"]
   anomalyThresholdPercent: 20
+  quietHours:
+    start: "23:00"
+    end: "07:00"
+    timezone: "local"
 
 notifiers:
   - type: console
@@ -26,6 +30,9 @@ notifiers:
   - type: slack
     enabled: false
     webhookUrlEnv: SLACK_WEBHOOK_URL
+  - type: webhook
+    enabled: false
+    webhookUrlEnv: WEBHOOK_URL
 
 sources:
   - id: tsla-stock
@@ -86,6 +93,13 @@ rules:
         operator: "<="
         value: 35
     message: "{{title}} is {{price}}: {{url}}"
+
+  - name: "TSLA price drop"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: decreased
+    message: "{{symbol}} dropped to {{price}} since the last check."
 
   - name: "Housing article keyword"
     source: housing-rss-demo

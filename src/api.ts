@@ -1,13 +1,22 @@
-import { loadConfig, validateConfig, type ConfigValidationResult } from "./config.js";
+import { resolve } from "node:path";
+import {
+  loadConfig,
+  listConfigProfiles,
+  resolveConfigPath,
+  validateConfig,
+  type ConfigProfile,
+  type ConfigValidationResult
+} from "./config.js";
 import type { DashboardRunResult } from "./dashboard.js";
 import { getDashboardConfig, isDashboardAuthorized, runDashboardScrape } from "./dashboard.js";
 import { buildDigestPreview } from "./digest.js";
 import { nlRuleToYaml, parseNlRule, type ParsedNlRule } from "./nl-rules.js";
+import { formatPrometheusMetrics } from "./metrics.js";
 import { sendTestNotification, type TestableNotifierType } from "./notifiers/index.js";
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.4.0";
+export const APP_VERSION = "0.5.0";
 
 export interface HealthResponse {
   version: string;
@@ -16,6 +25,7 @@ export interface HealthResponse {
 
 export interface DashboardRequestBody {
   dryRun?: boolean;
+  configPath?: string;
 }
 
 export interface TestNotifierRequestBody {
@@ -63,10 +73,30 @@ export function readDashboardSecret(headers: Record<string, string | string[] | 
   return Array.isArray(value) ? value[0] : value;
 }
 
-export function getConfigResponse(): DashboardApiResponse<ReturnType<typeof getDashboardConfig>> {
+function resolveRequestConfigPath(configPath?: string): string | undefined {
+  return configPath?.trim() || process.env.CONFIG_PATH;
+}
+
+export function getConfigResponse(configPath?: string): DashboardApiResponse<ReturnType<typeof getDashboardConfig>> {
   return {
     ok: true,
-    data: getDashboardConfig(process.env.CONFIG_PATH)
+    data: getDashboardConfig(resolveRequestConfigPath(configPath))
+  };
+}
+
+export function getConfigProfilesResponse(): DashboardApiResponse<{
+  activePath: string;
+  profiles: ConfigProfile[];
+}> {
+  const activePath = resolveConfigPath(process.env.CONFIG_PATH);
+  const profiles = listConfigProfiles();
+
+  return {
+    ok: true,
+    data: {
+      activePath: profiles.find((profile) => resolve(process.cwd(), profile.path) === activePath)?.path ?? process.env.CONFIG_PATH ?? "config.yml",
+      profiles
+    }
   };
 }
 
@@ -94,17 +124,21 @@ export async function runScrapeResponse(
   return {
     ok: true,
     data: await runDashboardScrape({
-      configPath: process.env.CONFIG_PATH,
+      configPath: resolveRequestConfigPath(body.configPath),
       dryRun: body.dryRun
     })
   };
 }
 
-export function getConfigValidationResponse(): DashboardApiResponse<ConfigValidationResult> {
+export function getConfigValidationResponse(configPath?: string): DashboardApiResponse<ConfigValidationResult> {
   return {
     ok: true,
-    data: validateConfig(process.env.CONFIG_PATH)
+    data: validateConfig(resolveRequestConfigPath(configPath))
   };
+}
+
+export function getMetricsResponse(): string {
+  return formatPrometheusMetrics();
 }
 
 export function parseNlRuleResponse(body: NlRuleRequestBody): DashboardApiResponse<NlRuleResponse> {
@@ -220,10 +254,10 @@ export async function testNotifierResponse(
     };
   }
 
-  if (!body.type || !["discord", "telegram", "slack"].includes(body.type)) {
+  if (!body.type || !["discord", "telegram", "slack", "webhook"].includes(body.type)) {
     return {
       ok: false,
-      error: 'Invalid notifier type. Expected "discord", "telegram", or "slack".'
+      error: 'Invalid notifier type. Expected "discord", "telegram", "slack", or "webhook".'
     };
   }
 

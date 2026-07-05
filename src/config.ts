@@ -1,12 +1,35 @@
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { basename, resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import type { BotConfig } from "./types.js";
 
+const quietHoursSchema = z
+  .object({
+    start: z.string().regex(/^\d{1,2}:\d{2}$/),
+    end: z.string().regex(/^\d{1,2}:\d{2}$/),
+    timezone: z.string().default("local")
+  })
+  .optional();
+
 const conditionSchema = z.object({
   field: z.string().min(1),
-  operator: z.enum(["<", "<=", ">", ">=", "==", "!=", "contains", "not_contains", "regex", "exists"]),
+  operator: z.enum([
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "==",
+    "!=",
+    "contains",
+    "not_contains",
+    "regex",
+    "exists",
+    "changed_by",
+    "changed_pct",
+    "increased",
+    "decreased"
+  ]),
   value: z.unknown().optional()
 });
 
@@ -19,7 +42,8 @@ const settingsSchema = z
     stateTtlDays: z.number().int().positive().default(30),
     digestMode: z.boolean().default(false),
     priceHistoryFields: z.array(z.string().min(1)).default(["price"]),
-    anomalyThresholdPercent: z.number().positive().default(20)
+    anomalyThresholdPercent: z.number().positive().default(20),
+    quietHours: quietHoursSchema
   })
   .default({});
 
@@ -83,6 +107,11 @@ const notifierSchema = z.discriminatedUnion("type", [
     type: z.literal("slack"),
     enabled: z.boolean().optional(),
     webhookUrlEnv: z.string().default("SLACK_WEBHOOK_URL")
+  }),
+  z.object({
+    type: z.literal("webhook"),
+    enabled: z.boolean().optional(),
+    webhookUrlEnv: z.string().default("WEBHOOK_URL")
   })
 ]);
 
@@ -102,6 +131,45 @@ const configSchema = z.object({
     .default([]),
   notifiers: z.array(notifierSchema).default([{ type: "console", enabled: true }])
 });
+
+export interface ConfigProfile {
+  id: string;
+  label: string;
+  path: string;
+}
+
+export function listConfigProfiles(): ConfigProfile[] {
+  const profiles: ConfigProfile[] = [];
+  const seen = new Set<string>();
+
+  const addProfile = (relativePath: string, label?: string): void => {
+    const absolute = resolve(process.cwd(), relativePath);
+    if (!existsSync(absolute) || seen.has(relativePath)) {
+      return;
+    }
+
+    seen.add(relativePath);
+    profiles.push({
+      id: relativePath,
+      label: label ?? basename(relativePath),
+      path: relativePath
+    });
+  };
+
+  addProfile("config.example.yml", "Example config");
+  addProfile("config.yml", "Local config");
+
+  const configsDir = resolve(process.cwd(), "configs");
+  if (existsSync(configsDir)) {
+    for (const entry of readdirSync(configsDir, { withFileTypes: true })) {
+      if (entry.isFile() && /\.ya?ml$/i.test(entry.name)) {
+        addProfile(`configs/${entry.name}`);
+      }
+    }
+  }
+
+  return profiles.sort((left, right) => left.label.localeCompare(right.label));
+}
 
 export function resolveConfigPath(configPath?: string): string {
   const requested = configPath ?? process.env.CONFIG_PATH ?? "config.yml";
@@ -239,6 +307,13 @@ function collectConfigIssues(config: BotConfig, issues: ConfigValidationIssue[])
       const envName = notifier.webhookUrlEnv ?? "SLACK_WEBHOOK_URL";
       if (!process.env[envName]) {
         issues.push({ level: "warning", message: `Slack notifier enabled but ${envName} is not set` });
+      }
+    }
+
+    if (notifier.type === "webhook") {
+      const envName = notifier.webhookUrlEnv ?? "WEBHOOK_URL";
+      if (!process.env[envName]) {
+        issues.push({ level: "warning", message: `Webhook notifier enabled but ${envName} is not set` });
       }
     }
   }

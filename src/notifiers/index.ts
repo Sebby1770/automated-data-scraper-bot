@@ -3,9 +3,10 @@ import { ConsoleNotifier } from "./console.js";
 import { DiscordNotifier } from "./discord.js";
 import { SlackNotifier } from "./slack.js";
 import { TelegramNotifier } from "./telegram.js";
+import { WebhookNotifier } from "./webhook.js";
 import type { Notifier } from "./types.js";
 
-export type TestableNotifierType = "discord" | "telegram" | "slack";
+export type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook";
 
 export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
   const notifiers: Notifier[] = [];
@@ -52,6 +53,17 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
         continue;
       }
       notifiers.push(new SlackNotifier(webhookUrl));
+      continue;
+    }
+
+    if (config.type === "webhook") {
+      const envName = config.webhookUrlEnv ?? "WEBHOOK_URL";
+      const webhookUrl = process.env[envName];
+      if (!webhookUrl) {
+        console.warn(`Skipping webhook notifier because ${envName} is not set.`);
+        continue;
+      }
+      notifiers.push(new WebhookNotifier(webhookUrl));
     }
   }
 
@@ -74,6 +86,14 @@ export function createTestNotifier(type: TestableNotifierType): Notifier {
       throw new Error("TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID is not set");
     }
     return new TelegramNotifier(token, chatId);
+  }
+
+  if (type === "webhook") {
+    const webhookUrl = process.env.WEBHOOK_URL;
+    if (!webhookUrl) {
+      throw new Error("WEBHOOK_URL is not set");
+    }
+    return new WebhookNotifier(webhookUrl);
   }
 
   const webhookUrl = process.env.SLACK_WEBHOOK_URL;

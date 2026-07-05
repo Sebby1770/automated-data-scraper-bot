@@ -5,9 +5,11 @@ import { resolve } from "node:path";
 import { createServer as createViteServer } from "vite";
 import {
   digestPreviewResponse,
+  getConfigProfilesResponse,
   getConfigResponse,
   getConfigValidationResponse,
   getHealthResponse,
+  getMetricsResponse,
   parseNlRuleResponse,
   readDashboardSecret,
   runScrapeResponse,
@@ -31,17 +33,36 @@ app.get("/api/health", (_request, response) => {
   response.json(getHealthResponse());
 });
 
-app.get("/api/config", (_request, response) => {
+app.get("/api/config", (request, response) => {
   try {
-    response.json(getConfigResponse());
+    const configPath = typeof request.query.configPath === "string" ? request.query.configPath : undefined;
+    response.json(getConfigResponse(configPath));
   } catch (error) {
     sendError(response, error);
   }
 });
 
-app.get("/api/config/validate", (_request, response) => {
+app.get("/api/config/profiles", (_request, response) => {
   try {
-    response.json(getConfigValidationResponse());
+    response.json(getConfigProfilesResponse());
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.get("/api/config/validate", (request, response) => {
+  try {
+    const configPath = typeof request.query.configPath === "string" ? request.query.configPath : undefined;
+    response.json(getConfigValidationResponse(configPath));
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.get("/api/metrics", (_request, response) => {
+  try {
+    response.type("text/plain; version=0.0.4; charset=utf-8");
+    response.send(getMetricsResponse());
   } catch (error) {
     sendError(response, error);
   }

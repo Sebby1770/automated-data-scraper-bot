@@ -1,0 +1,44 @@
+# Stock-focused watch profile — TSLA quote with price-change rules.
+
+settings:
+  runIntervalSeconds: 300
+  userAgent: "AutomatedDataScraperBot/0.5 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  requestTimeoutMs: 12000
+  maxConcurrency: 2
+  stateTtlDays: 30
+  priceHistoryFields: ["price"]
+  anomalyThresholdPercent: 15
+  quietHours:
+    start: "23:00"
+    end: "07:00"
+    timezone: "local"
+
+notifiers:
+  - type: console
+    enabled: true
+  - type: webhook
+    enabled: false
+    webhookUrlEnv: WEBHOOK_URL
+
+sources:
+  - id: tsla-stock
+    type: stooq
+    label: "TSLA quote"
+    symbol: tsla.us
+
+rules:
+  - name: "TSLA under target"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: "<="
+        value: 180
+    message: "{{symbol}} is trading at {{price}}. Rule: TSLA under target."
+
+  - name: "TSLA sharp drop"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: changed_pct
+        value: 5
+    message: "{{symbol}} moved {{price}} — dropped more than 5% since last check."

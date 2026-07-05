@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 import { loadConfig } from "./config.js";
+import { isQuietHours } from "./quiet-hours.js";
 import { runOnce } from "./runner.js";
 import { createMemoryPriceHistoryStore } from "./state/price-history.js";
 import { MemoryStateStore } from "./state/memory.js";
@@ -34,10 +35,13 @@ export interface DashboardNotifier {
 export interface DashboardConfig {
   loadedAt: string;
   secured: boolean;
+  configPath: string;
   settings: BotConfig["settings"] & {
     digestMode: boolean;
     priceHistoryFields: string[];
     anomalyThresholdPercent: number;
+    quietHours?: BotConfig["settings"]["quietHours"];
+    quietHoursActive: boolean;
   };
   sources: DashboardSource[];
   rules: DashboardRule[];
@@ -52,15 +56,19 @@ export interface DashboardRunResult {
 
 export function getDashboardConfig(configPath?: string): DashboardConfig {
   const config = loadConfig(configPath);
+  const quietHours = config.settings.quietHours;
 
   return {
     loadedAt: new Date().toISOString(),
     secured: Boolean(process.env.DASHBOARD_SECRET),
+    configPath: configPath ?? process.env.CONFIG_PATH ?? "config.yml",
     settings: {
       ...config.settings,
       digestMode: config.settings.digestMode ?? false,
       priceHistoryFields: config.settings.priceHistoryFields ?? ["price"],
-      anomalyThresholdPercent: config.settings.anomalyThresholdPercent ?? 20
+      anomalyThresholdPercent: config.settings.anomalyThresholdPercent ?? 20,
+      quietHours,
+      quietHoursActive: isQuietHours(quietHours)
     },
     sources: config.sources.map(summarizeSource),
     rules: config.rules.map((rule) => ({
@@ -169,6 +177,16 @@ function summarizeNotifier(notifier: NotifierConfig): DashboardNotifier {
 
   if (notifier.type === "slack") {
     const envName = notifier.webhookUrlEnv ?? "SLACK_WEBHOOK_URL";
+    return {
+      type: notifier.type,
+      enabled,
+      ready: enabled && Boolean(process.env[envName]),
+      missingEnv: enabled && !process.env[envName] ? [envName] : []
+    };
+  }
+
+  if (notifier.type === "webhook") {
+    const envName = notifier.webhookUrlEnv ?? "WEBHOOK_URL";
     return {
       type: notifier.type,
       enabled,

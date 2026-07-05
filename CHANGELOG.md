@@ -2,6 +2,27 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.5.0] - 2026-07-05
+
+### Added
+
+- Comparison rule operators in `src/rules.ts`: `changed_by`, `changed_pct`, `increased`, `decreased` (compare current values to price history)
+- Generic webhook notifier (`src/notifiers/webhook.ts`) posting alert JSON to `WEBHOOK_URL`
+- Quiet hours (`settings.quietHours`) suppressing live notifier sends while still recording alerts
+- Dashboard dark mode toggle with `localStorage` persistence and full theme in `styles.css`
+- Config profiles via `CONFIG_PATH`, `configs/` folder, dashboard dropdown, and `GET /api/config/profiles`
+- Example profiles: `configs/stocks-watch.yml` and `configs/retail-watch.yml`
+- Prometheus metrics endpoint `GET /api/metrics` (`scrape_runs_total`, `alerts_total`, `sources_count`, `last_run_duration_ms`)
+- Dashboard alert grouping by rule name with expand/collapse
+- Tests for comparison rules, quiet hours, metrics, webhook notifier, and config profiles
+
+### Changed
+
+- Bumped package version to `0.5.0`
+- `RunSummary` now includes `quietHoursActive` and `notificationsSuppressed`
+- Dashboard shows quiet-hours indicator and webhook notifier test button
+- Updated README with v0.5.0 features and metrics endpoint
+
 ## [0.4.0] - 2026-07-05
 
 ### Added

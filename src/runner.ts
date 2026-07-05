@@ -1,8 +1,10 @@
 import type { Alert, BotConfig, DataItem, PriceTrend, RunSummary, SourceHealth } from "./types.js";
 import { detectAnomalies, pickPrimaryAnomaly } from "./anomaly.js";
 import { sendDigest } from "./digest.js";
+import { recordScrapeRun } from "./metrics.js";
 import { createNotifiers } from "./notifiers/index.js";
 import type { Notifier } from "./notifiers/types.js";
+import { isQuietHours } from "./quiet-hours.js";
 import { evaluateRules } from "./rules.js";
 import { createSourceAdapter } from "./sources/index.js";
 import { createStateStore, type StateStore } from "./state/index.js";
@@ -67,8 +69,13 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
 
   const items = sourceResults.flat();
   const priceHistoryUpdates = await priceHistory.recordItems(items, trackedFields, startedAt);
-  const matches = items.flatMap((item) => evaluateRules(item, config.rules));
+  const ruleContext = {
+    getHistory: (sourceId: string, itemId: string, field: string) => priceHistory.getHistory(sourceId, itemId, field)
+  };
+  const matches = items.flatMap((item) => evaluateRules(item, config.rules, ruleContext));
   const alerts: Alert[] = [];
+  const quietHoursActive = isQuietHours(config.settings.quietHours);
+  const suppressNotifications = !options.dryRun && quietHoursActive;
 
   for (const match of matches) {
     if (await state.has(match.alert.id)) {
@@ -78,20 +85,20 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     const enrichedAlert = enrichAlert(match.alert, match.alert.item, priceHistory, anomalyThreshold);
     alerts.push(enrichedAlert);
 
-    if (!options.dryRun && !digestMode) {
+    if (!options.dryRun && !digestMode && !suppressNotifications) {
       await notifyAll(notifiers, enrichedAlert, errors);
       await state.mark(enrichedAlert.id);
     }
   }
 
-  if (!options.dryRun && digestMode && alerts.length > 0) {
+  if (!options.dryRun && digestMode && alerts.length > 0 && !suppressNotifications) {
     await sendDigest(notifiers, alerts, errors);
     for (const alert of alerts) {
       await state.mark(alert.id);
     }
   }
 
-  return {
+  const summary: RunSummary = {
     startedAt,
     finishedAt: new Date().toISOString(),
     sourceCount: config.sources.length,
@@ -101,12 +108,17 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     errors,
     sourceHealth,
     digestMode,
+    quietHoursActive,
+    notificationsSuppressed: suppressNotifications,
     priceHistory: {
       updated: priceHistoryUpdates.updated,
       entries: priceHistoryUpdates.entries
     },
     ...(options.includeAlerts ? { alerts } : {})
   };
+
+  recordScrapeRun(summary);
+  return summary;
 }
 
 export async function watch(config: BotConfig): Promise<void> {

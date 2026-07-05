@@ -2,6 +2,12 @@ export type DataRecord = Record<string, unknown>;
 
 export type SourceKind = "html" | "rss" | "stooq" | "json";
 
+export interface QuietHoursSettings {
+  start: string;
+  end: string;
+  timezone?: "local" | string;
+}
+
 export interface BotSettings {
   runIntervalSeconds: number;
   userAgent: string;
@@ -11,6 +17,7 @@ export interface BotSettings {
   digestMode?: boolean;
   priceHistoryFields?: string[];
   anomalyThresholdPercent?: number;
+  quietHours?: QuietHoursSettings;
 }
 
 export interface BaseSourceConfig {
@@ -64,7 +71,11 @@ export type RuleOperator =
   | "contains"
   | "not_contains"
   | "regex"
-  | "exists";
+  | "exists"
+  | "changed_by"
+  | "changed_pct"
+  | "increased"
+  | "decreased";
 
 export interface RuleCondition {
   field: string;
@@ -98,6 +109,11 @@ export type NotifierConfig =
     }
   | {
       type: "slack";
+      enabled?: boolean;
+      webhookUrlEnv?: string;
+    }
+  | {
+      type: "webhook";
       enabled?: boolean;
       webhookUrlEnv?: string;
     };
@@ -178,4 +194,6 @@ export interface RunSummary {
   alerts?: Alert[];
   digestMode?: boolean;
   priceHistory?: PriceHistorySummary;
+  quietHoursActive?: boolean;
+  notificationsSuppressed?: boolean;
 }

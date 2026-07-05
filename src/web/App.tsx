@@ -13,12 +13,14 @@ import {
   History,
   Loader2,
   MessageSquare,
+  Moon,
   Play,
   RefreshCw,
   Rss,
   Search,
   Shield,
   ShoppingBag,
+  Sun,
   TrendingUp,
   Wand2,
   X
@@ -26,9 +28,23 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SourceType = "html" | "rss" | "stooq" | "json";
-type NotifierType = "console" | "discord" | "telegram" | "slack";
-type TestableNotifierType = "discord" | "telegram" | "slack";
-type RuleOperator = "<" | "<=" | ">" | ">=" | "==" | "!=" | "contains" | "not_contains" | "regex" | "exists";
+type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook";
+type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook";
+type RuleOperator =
+  | "<"
+  | "<="
+  | ">"
+  | ">="
+  | "=="
+  | "!="
+  | "contains"
+  | "not_contains"
+  | "regex"
+  | "exists"
+  | "changed_by"
+  | "changed_pct"
+  | "increased"
+  | "decreased";
 
 interface DashboardSource {
   id: string;
@@ -54,14 +70,27 @@ interface DashboardNotifier {
   missingEnv: string[];
 }
 
+interface ConfigProfile {
+  id: string;
+  label: string;
+  path: string;
+}
+
 interface DashboardConfig {
   loadedAt: string;
   secured: boolean;
+  configPath: string;
   settings: {
     runIntervalSeconds: number;
     maxConcurrency: number;
     requestTimeoutMs: number;
     stateTtlDays: number;
+    quietHours?: {
+      start: string;
+      end: string;
+      timezone?: string;
+    };
+    quietHoursActive: boolean;
   };
   sources: DashboardSource[];
   rules: DashboardRule[];
@@ -115,6 +144,8 @@ interface RunSummary {
   sourceHealth?: SourceHealth[];
   alerts?: AlertItem[];
   digestMode?: boolean;
+  quietHoursActive?: boolean;
+  notificationsSuppressed?: boolean;
 }
 
 interface ConfigValidationResult {
@@ -147,6 +178,8 @@ interface RunHistoryEntry {
 }
 
 const RUN_HISTORY_KEY = "scraperRunHistory";
+const CONFIG_PROFILE_KEY = "scraperConfigPath";
+const DARK_MODE_KEY = "scraperDarkMode";
 const MAX_RUN_HISTORY = 10;
 
 const sourceIcons: Record<SourceType, typeof ShoppingBag> = {
@@ -163,7 +196,22 @@ const sourceTone: Record<SourceType, string> = {
   json: "tone-violet"
 };
 
-const ruleOperators: RuleOperator[] = ["<", "<=", ">", ">=", "==", "!=", "contains", "not_contains", "regex", "exists"];
+const ruleOperators: RuleOperator[] = [
+  "<",
+  "<=",
+  ">",
+  ">=",
+  "==",
+  "!=",
+  "contains",
+  "not_contains",
+  "regex",
+  "exists",
+  "changed_by",
+  "changed_pct",
+  "increased",
+  "decreased"
+];
 
 export function App() {
   const [config, setConfig] = useState<DashboardConfig | null>(null);
@@ -194,6 +242,9 @@ export function App() {
   const [sandboxOpen, setSandboxOpen] = useState(false);
   const [digestPreview, setDigestPreview] = useState<string | null>(null);
   const [digestPreviewing, setDigestPreviewing] = useState(false);
+  const [configPath, setConfigPath] = useState(() => window.localStorage.getItem(CONFIG_PROFILE_KEY) ?? "");
+  const [configProfiles, setConfigProfiles] = useState<ConfigProfile[]>([]);
+  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(DARK_MODE_KEY) === "true");
 
   const readyNotifiers = useMemo(() => config?.notifiers.filter((notifier) => notifier.ready).length ?? 0, [config]);
   const lastRunMs = useMemo(() => {
@@ -218,25 +269,59 @@ export function App() {
   }, [config?.rules, ruleFilter]);
 
   useEffect(() => {
-    void refreshConfig();
+    void loadProfiles();
+    void refreshConfig(configPath);
   }, []);
 
-  async function refreshConfig() {
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? "dark" : "light";
+    window.localStorage.setItem(DARK_MODE_KEY, String(darkMode));
+  }, [darkMode]);
+
+  async function loadProfiles() {
+    try {
+      const response = await fetch("/api/config/profiles");
+      const payload = (await response.json()) as ApiResponse<{ activePath: string; profiles: ConfigProfile[] }>;
+      if (!payload.ok || !payload.data) {
+        return;
+      }
+
+      setConfigProfiles(payload.data.profiles);
+      if (!configPath && payload.data.activePath) {
+        setConfigPath(payload.data.activePath);
+      }
+    } catch {
+      // Profiles are optional for the dashboard shell.
+    }
+  }
+
+  async function refreshConfig(path = configPath) {
     setStatus("loading");
     setError(null);
 
     try {
-      const response = await fetch("/api/config");
+      const query = path ? `?configPath=${encodeURIComponent(path)}` : "";
+      const response = await fetch(`/api/config${query}`);
       const payload = (await response.json()) as ApiResponse<DashboardConfig>;
       if (!payload.ok || !payload.data) {
         throw new Error(payload.error ?? "Unable to load dashboard config");
       }
       setConfig(payload.data);
+      if (payload.data.configPath) {
+        setConfigPath(payload.data.configPath);
+        window.localStorage.setItem(CONFIG_PROFILE_KEY, payload.data.configPath);
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setStatus("idle");
     }
+  }
+
+  async function switchConfigProfile(path: string) {
+    setConfigPath(path);
+    window.localStorage.setItem(CONFIG_PROFILE_KEY, path);
+    await refreshConfig(path);
   }
 
   const runScrape = useCallback(async () => {
@@ -251,7 +336,7 @@ export function App() {
           "content-type": "application/json",
           ...(secret ? { "x-dashboard-secret": secret } : {})
         },
-        body: JSON.stringify({ dryRun })
+        body: JSON.stringify({ dryRun, configPath: configPath || undefined })
       });
       const payload = (await response.json()) as ApiResponse<RunResult>;
       if (!payload.ok || !payload.data) {
@@ -270,14 +355,15 @@ export function App() {
     } finally {
       setStatus("idle");
     }
-  }, [dryRun, secret]);
+  }, [configPath, dryRun, secret]);
 
   async function validateConfig() {
     setValidating(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/config/validate");
+      const query = configPath ? `?configPath=${encodeURIComponent(configPath)}` : "";
+      const response = await fetch(`/api/config/validate${query}`);
       const payload = (await response.json()) as ApiResponse<ConfigValidationResult>;
       if (!payload.ok || !payload.data) {
         throw new Error(payload.error ?? "Config validation failed");
@@ -418,6 +504,40 @@ export function App() {
         </div>
 
         <div className="action-row">
+          {configProfiles.length > 0 ? (
+            <label className="profile-field">
+              <Database size={16} aria-hidden="true" />
+              <select
+                aria-label="Config profile"
+                value={configPath || config?.configPath || ""}
+                onChange={(event) => void switchConfigProfile(event.target.value)}
+                disabled={isBusy}
+              >
+                {configProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.path}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+
+          {config?.settings.quietHoursActive ? (
+            <span className="quiet-hours-indicator" title="Live notifier sends are suppressed during quiet hours">
+              <Moon size={16} aria-hidden="true" />
+              Quiet hours
+            </span>
+          ) : null}
+
+          <button
+            className="icon-button"
+            type="button"
+            title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            onClick={() => setDarkMode((current) => !current)}
+          >
+            {darkMode ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+          </button>
+
           {config?.secured ? (
             <label className="secret-field">
               <Shield size={16} aria-hidden="true" />
@@ -452,7 +572,7 @@ export function App() {
             <FlaskConical size={16} aria-hidden="true" />
             Rule sandbox
           </button>
-          <button className="icon-button" type="button" title="Refresh config" onClick={refreshConfig} disabled={isBusy}>
+          <button className="icon-button" type="button" title="Refresh config" onClick={() => void refreshConfig()} disabled={isBusy}>
             <RefreshCw size={18} aria-hidden="true" />
           </button>
           <button className="primary-button" type="button" onClick={runScrape} disabled={isBusy} title="Run scrape (Ctrl+Enter)">
@@ -607,7 +727,7 @@ export function App() {
               <h2>Run Output</h2>
               <p>
                 {runResult
-                  ? `${runResult.dryRun ? "Dry run" : "Live alerts"}${runResult.summary.digestMode ? " · digest mode" : ""}`
+                  ? `${runResult.dryRun ? "Dry run" : "Live alerts"}${runResult.summary.digestMode ? " · digest mode" : ""}${runResult.summary.notificationsSuppressed ? " · quiet hours" : ""}`
                   : "No run yet"}
               </p>
             </div>
@@ -754,7 +874,11 @@ function NotifierList({
   return (
     <div className="notifier-list">
       {notifiers.map((notifier) => {
-        const testable = notifier.type === "discord" || notifier.type === "telegram" || notifier.type === "slack";
+        const testable =
+          notifier.type === "discord" ||
+          notifier.type === "telegram" ||
+          notifier.type === "slack" ||
+          notifier.type === "webhook";
 
         return (
           <div className="notifier-row" key={notifier.type}>
@@ -1188,33 +1312,73 @@ function RunOutput({ result, digestPreview }: { result: RunResult | null; digest
 
       {digestPreview ? <pre className="digest-preview">{digestPreview}</pre> : null}
 
-      {alerts.length > 0 ? (
-        <div className="alert-list">
-          {alerts.map((alert) => (
-            <article className="alert-item" key={alert.id}>
-              <div>
-                <div className="alert-meta">
-                  <span>{alert.ruleName}</span>
-                  {alert.anomaly ? <span className="anomaly-badge">Anomaly · {alert.anomaly.deviationPercent}%</span> : null}
-                </div>
-                <strong>{alert.title}</strong>
-                <p>{alert.message}</p>
-                {alert.anomaly ? <small className="anomaly-copy">{alert.anomaly.explanation}</small> : null}
-                {alert.priceHistory && alert.priceHistory.history.length >= 2 ? (
-                  <PriceSparkline trend={alert.priceHistory} />
-                ) : null}
+      {alerts.length > 0 ? <GroupedAlerts alerts={alerts} /> : <EmptyState label="No alerts matched" />}
+    </div>
+  );
+}
+
+function GroupedAlerts({ alerts }: { alerts: AlertItem[] }) {
+  const groups = useMemo(() => {
+    const grouped = new Map<string, AlertItem[]>();
+    for (const alert of alerts) {
+      const existing = grouped.get(alert.ruleName) ?? [];
+      existing.push(alert);
+      grouped.set(alert.ruleName, existing);
+    }
+    return [...grouped.entries()].map(([ruleName, items]) => ({ ruleName, items }));
+  }, [alerts]);
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(groups.map((group) => [group.ruleName, true]))
+  );
+
+  return (
+    <div className="alert-groups">
+      {groups.map((group) => {
+        const isOpen = expanded[group.ruleName] ?? true;
+        return (
+          <section className="alert-group" key={group.ruleName}>
+            <button
+              className="alert-group-header"
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => setExpanded((current) => ({ ...current, [group.ruleName]: !isOpen }))}
+            >
+              <strong>{group.ruleName}</strong>
+              <span>
+                {group.items.length} alert{group.items.length === 1 ? "" : "s"}
+              </span>
+            </button>
+            {isOpen ? (
+              <div className="alert-list">
+                {group.items.map((alert) => (
+                  <article className="alert-item" key={alert.id}>
+                    <div>
+                      <div className="alert-meta">
+                        <span>{alert.sourceLabel}</span>
+                        {alert.anomaly ? (
+                          <span className="anomaly-badge">Anomaly · {alert.anomaly.deviationPercent}%</span>
+                        ) : null}
+                      </div>
+                      <strong>{alert.title}</strong>
+                      <p>{alert.message}</p>
+                      {alert.anomaly ? <small className="anomaly-copy">{alert.anomaly.explanation}</small> : null}
+                      {alert.priceHistory && alert.priceHistory.history.length >= 2 ? (
+                        <PriceSparkline trend={alert.priceHistory} />
+                      ) : null}
+                    </div>
+                    {alert.url ? (
+                      <a href={alert.url} target="_blank" rel="noreferrer" title="Open alert target">
+                        <ExternalLink size={16} aria-hidden="true" />
+                      </a>
+                    ) : null}
+                  </article>
+                ))}
               </div>
-              {alert.url ? (
-                <a href={alert.url} target="_blank" rel="noreferrer" title="Open alert target">
-                  <ExternalLink size={16} aria-hidden="true" />
-                </a>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <EmptyState label="No alerts matched" />
-      )}
+            ) : null}
+          </section>
+        );
+      })}
     </div>
   );
 }
