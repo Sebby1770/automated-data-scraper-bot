@@ -20,6 +20,9 @@ notifiers:
     enabled: false
     botTokenEnv: TELEGRAM_BOT_TOKEN
     chatIdEnv: TELEGRAM_CHAT_ID
+  - type: slack
+    enabled: false
+    webhookUrlEnv: SLACK_WEBHOOK_URL
 
 sources:
   - id: tsla-stock
@@ -53,6 +56,16 @@ sources:
     type: rss
     label: "Housing RSS watch"
     url: "https://www.housingwire.com/feed/"
+
+  - id: json-placeholder-demo
+    type: json
+    label: "JSON API demo"
+    url: "https://jsonplaceholder.typicode.com/posts"
+    idFields: ["id"]
+    fields:
+      title: "title"
+      url: "url"
+      summary: "body"
 
 rules:
   - name: "TSLA under target"

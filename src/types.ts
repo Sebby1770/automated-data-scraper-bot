@@ -1,6 +1,6 @@
 export type DataRecord = Record<string, unknown>;
 
-export type SourceKind = "html" | "rss" | "stooq";
+export type SourceKind = "html" | "rss" | "stooq" | "json";
 
 export interface BotSettings {
   runIntervalSeconds: number;
@@ -41,7 +41,15 @@ export interface StooqSourceConfig extends BaseSourceConfig {
   symbol: string;
 }
 
-export type SourceConfig = HtmlSourceConfig | RssSourceConfig | StooqSourceConfig;
+export interface JsonSourceConfig extends BaseSourceConfig {
+  type: "json";
+  url: string;
+  itemsPath?: string;
+  idFields?: string[];
+  fields: Record<string, string>;
+}
+
+export type SourceConfig = HtmlSourceConfig | RssSourceConfig | StooqSourceConfig | JsonSourceConfig;
 
 export type RuleOperator =
   | "<"
@@ -84,6 +92,11 @@ export type NotifierConfig =
       enabled?: boolean;
       botTokenEnv?: string;
       chatIdEnv?: string;
+    }
+  | {
+      type: "slack";
+      enabled?: boolean;
+      webhookUrlEnv?: string;
     };
 
 export interface BotConfig {
@@ -115,6 +128,14 @@ export interface Alert {
   matchedAt: string;
 }
 
+export interface SourceHealth {
+  sourceId: string;
+  sourceLabel: string;
+  lastFetchAt: string;
+  itemCount: number;
+  error?: string;
+}
+
 export interface RunSummary {
   startedAt: string;
   finishedAt: string;
@@ -123,5 +144,6 @@ export interface RunSummary {
   matchedCount: number;
   alertCount: number;
   errors: string[];
+  sourceHealth?: SourceHealth[];
   alerts?: Alert[];
 }

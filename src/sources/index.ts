@@ -1,5 +1,6 @@
 import type { SourceConfig } from "../types.js";
 import { HtmlSourceAdapter } from "./html.js";
+import { JsonSourceAdapter } from "./json.js";
 import { RssSourceAdapter } from "./rss.js";
 import { StooqSourceAdapter } from "./stooq.js";
 import type { SourceAdapter, SourceRuntimeOptions } from "./types.js";
@@ -12,5 +13,7 @@ export function createSourceAdapter(config: SourceConfig, options: SourceRuntime
       return new RssSourceAdapter(config, options);
     case "stooq":
       return new StooqSourceAdapter(config, options);
+    case "json":
+      return new JsonSourceAdapter(config, options);
   }
 }

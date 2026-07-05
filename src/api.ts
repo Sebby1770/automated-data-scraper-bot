@@ -1,7 +1,9 @@
+import { validateConfig, type ConfigValidationResult } from "./config.js";
 import type { DashboardRunResult } from "./dashboard.js";
 import { getDashboardConfig, isDashboardAuthorized, runDashboardScrape } from "./dashboard.js";
+import { sendTestNotification, type TestableNotifierType } from "./notifiers/index.js";
 
-export const APP_VERSION = "0.2.0";
+export const APP_VERSION = "0.3.0";
 
 export interface HealthResponse {
   version: string;
@@ -10,6 +12,10 @@ export interface HealthResponse {
 
 export interface DashboardRequestBody {
   dryRun?: boolean;
+}
+
+export interface TestNotifierRequestBody {
+  type: TestableNotifierType;
 }
 
 export interface DashboardApiResponse<T> {
@@ -63,4 +69,46 @@ export async function runScrapeResponse(
       dryRun: body.dryRun
     })
   };
+}
+
+export function getConfigValidationResponse(): DashboardApiResponse<ConfigValidationResult> {
+  return {
+    ok: true,
+    data: validateConfig(process.env.CONFIG_PATH)
+  };
+}
+
+export async function testNotifierResponse(
+  body: TestNotifierRequestBody,
+  providedSecret?: string
+): Promise<DashboardApiResponse<{ type: TestableNotifierType; sentAt: string }>> {
+  if (!isDashboardAuthorized(providedSecret)) {
+    return {
+      ok: false,
+      error: "Unauthorized"
+    };
+  }
+
+  if (!body.type || !["discord", "telegram", "slack"].includes(body.type)) {
+    return {
+      ok: false,
+      error: 'Invalid notifier type. Expected "discord", "telegram", or "slack".'
+    };
+  }
+
+  try {
+    await sendTestNotification(body.type);
+    return {
+      ok: true,
+      data: {
+        type: body.type,
+        sentAt: new Date().toISOString()
+      }
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }

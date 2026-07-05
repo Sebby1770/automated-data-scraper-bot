@@ -5,10 +5,13 @@ import { resolve } from "node:path";
 import { createServer as createViteServer } from "vite";
 import {
   getConfigResponse,
+  getConfigValidationResponse,
   getHealthResponse,
   readDashboardSecret,
   runScrapeResponse,
-  type DashboardRequestBody
+  testNotifierResponse,
+  type DashboardRequestBody,
+  type TestNotifierRequestBody
 } from "./api.js";
 
 const root = process.cwd();
@@ -30,6 +33,14 @@ app.get("/api/config", (_request, response) => {
   }
 });
 
+app.get("/api/config/validate", (_request, response) => {
+  try {
+    response.json(getConfigValidationResponse());
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
 app.post("/api/run", async (request: Request<Record<string, never>, unknown, DashboardRequestBody>, response) => {
   try {
     const result = await runScrapeResponse(request.body ?? {}, readDashboardSecret(request.headers));
@@ -38,6 +49,18 @@ app.post("/api/run", async (request: Request<Record<string, never>, unknown, Das
     sendError(response, error);
   }
 });
+
+app.post(
+  "/api/test-notifier",
+  async (request: Request<Record<string, never>, unknown, TestNotifierRequestBody>, response) => {
+    try {
+      const result = await testNotifierResponse(request.body ?? { type: "discord" }, readDashboardSecret(request.headers));
+      response.status(result.ok ? 200 : result.error === "Unauthorized" ? 401 : 400).json(result);
+    } catch (error) {
+      sendError(response, error);
+    }
+  }
+);
 
 if (isProduction) {
   const clientDir = resolve(root, "dist/client");

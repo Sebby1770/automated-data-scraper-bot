@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.3.0] - 2026-07-05
+
+### Added
+
+- Slack webhook notifier (`src/notifiers/slack.ts`) with `SLACK_WEBHOOK_URL` support
+- `POST /api/test-notifier` endpoint and dashboard test buttons for Discord, Telegram, and Slack
+- Per-source health tracking in `RunSummary.sourceHealth` with dashboard Source Health panel
+- `validateConfig()` in `config.ts` and `GET /api/config/validate` endpoint with dashboard Validate button
+- Visual rule builder modal that exports YAML snippets to the clipboard
+- JSON REST source adapter (`src/sources/json.ts`) with dot-notation `itemsPath` and field mappings
+- HTTP retry/backoff via `fetchWithRetry()` in `src/utils/http.ts`
+- Docker support with multi-stage `Dockerfile` and `docker-compose.yml`
+- Tests for JSON source adapter and config validation
+
+### Changed
+
+- Bumped package version to `0.3.0`
+- Updated README with deploy badge, Slack/JSON/Docker docs, and new dashboard features
+
 ## [0.2.0] - 2026-07-05
 
 ### Added

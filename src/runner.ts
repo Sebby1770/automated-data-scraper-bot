@@ -1,4 +1,4 @@
-import type { Alert, BotConfig, DataItem, RunSummary } from "./types.js";
+import type { Alert, BotConfig, DataItem, RunSummary, SourceHealth } from "./types.js";
 import { createNotifiers } from "./notifiers/index.js";
 import type { Notifier } from "./notifiers/types.js";
 import { evaluateRules } from "./rules.js";
@@ -26,11 +26,29 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
 
   await state.prune?.();
 
+  const sourceHealth: SourceHealth[] = [];
   const sourceResults = await mapLimit(adapters, config.settings.maxConcurrency, async (adapter) => {
+    const lastFetchAt = new Date().toISOString();
+
     try {
-      return await adapter.fetchItems();
+      const fetchedItems = await adapter.fetchItems();
+      sourceHealth.push({
+        sourceId: adapter.config.id,
+        sourceLabel: adapter.config.label ?? adapter.config.id,
+        lastFetchAt,
+        itemCount: fetchedItems.length
+      });
+      return fetchedItems;
     } catch (error) {
-      errors.push(`${adapter.config.id}: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      errors.push(`${adapter.config.id}: ${message}`);
+      sourceHealth.push({
+        sourceId: adapter.config.id,
+        sourceLabel: adapter.config.label ?? adapter.config.id,
+        lastFetchAt,
+        itemCount: 0,
+        error: message
+      });
       return [];
     }
   });
@@ -60,6 +78,7 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     matchedCount: matches.length,
     alertCount: alerts.length,
     errors,
+    sourceHealth,
     ...(options.includeAlerts ? { alerts } : {})
   };
 }

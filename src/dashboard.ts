@@ -111,6 +111,17 @@ function summarizeSource(source: SourceConfig): DashboardSource {
     };
   }
 
+  if (source.type === "json") {
+    return {
+      id: source.id,
+      type: source.type,
+      label: source.label ?? source.id,
+      target: source.url,
+      detail: source.itemsPath ? `items at ${source.itemsPath}` : "JSON root",
+      fieldCount: Object.keys(source.fields).length
+    };
+  }
+
   return {
     id: source.id,
     type: source.type,
@@ -142,6 +153,16 @@ function summarizeNotifier(notifier: NotifierConfig): DashboardNotifier {
       enabled,
       ready: enabled && missingEnv.length === 0,
       missingEnv: enabled ? missingEnv : []
+    };
+  }
+
+  if (notifier.type === "slack") {
+    const envName = notifier.webhookUrlEnv ?? "SLACK_WEBHOOK_URL";
+    return {
+      type: notifier.type,
+      enabled,
+      ready: enabled && Boolean(process.env[envName]),
+      missingEnv: enabled && !process.env[envName] ? [envName] : []
     };
   }
 

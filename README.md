@@ -1,18 +1,22 @@
 # Automated Data Scraper Bot
 
-Config-driven bot and visual dashboard for watching retail listings, housing feeds, and stock quotes, then notifying you through Discord or Telegram when a rule matches.
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 
-It can run as a web app, a local long-lived process, or a protected Vercel Cron endpoint.
+Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, or Slack when a rule matches.
+
+It can run as a web app, a local long-lived process, a Docker container, or a protected Vercel Cron endpoint.
 
 ## What It Does
 
-- Opens a dashboard for sources, rules, notifier readiness, and manual scrape runs.
+- Opens a dashboard for sources, rules, notifier readiness, config validation, and manual scrape runs.
 - Scrapes HTML pages with CSS selectors for retail or marketplace-style listings.
 - Reads RSS feeds for housing/news-style sources.
 - Pulls stock quote snapshots from Stooq's public CSV endpoint.
+- Fetches JSON REST APIs with dot-notation field mappings.
 - Evaluates `all` and `any` rule conditions.
 - Deduplicates alerts so the same rule/item pair is not sent repeatedly.
-- Sends alerts to console, Discord webhooks, or Telegram bots.
+- Sends alerts to console, Discord webhooks, Telegram bots, or Slack incoming webhooks.
+- Retries HTTP requests with exponential backoff.
 - Supports persistent local state or Upstash Redis REST state for serverless deployments.
 
 ## Quick Start
@@ -50,21 +54,27 @@ The dashboard calls the local API routes:
 
 ```text
 GET  /api/config
+GET  /api/config/validate
 GET  /api/health
 POST /api/run
+POST /api/test-notifier
 ```
 
-Dashboard highlights in v0.2.0:
+Dashboard highlights in v0.3.0:
 
+- **Validate config** button — surfaces warnings/errors before you run
+- **Rule builder** modal — compose a rule and copy YAML to your clipboard
+- **Notifier test** buttons — send a test alert to Discord, Telegram, or Slack
+- **Source health** panel — per-source item counts, timestamps, and errors from the latest run
 - Run history panel (last 10 runs, stored in browser `localStorage` as `scraperRunHistory`)
 - Export matched alerts as JSON or CSV
 - Rules table search/filter
 - `Ctrl+Enter` to run a scrape
 - Prominent run timestamps and duration in the output panel
 
-Manual runs default to dry-run mode, which shows matching alerts without sending Discord or Telegram notifications. Switch to live alerts in the dashboard when you want notification adapters to send.
+Manual runs default to dry-run mode, which shows matching alerts without sending notifications. Switch to live alerts in the dashboard when you want notification adapters to send.
 
-To protect manual runs on a deployed dashboard, set:
+To protect manual runs and notifier tests on a deployed dashboard, set:
 
 ```bash
 DASHBOARD_SECRET=your-long-random-secret
@@ -78,6 +88,7 @@ Copy `.env.example` to `.env` and fill in whichever notifier you want:
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 TELEGRAM_BOT_TOKEN=123456:abc...
 TELEGRAM_CHAT_ID=123456789
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 ```
 
 Enable the notifier in `config.yml`:
@@ -87,6 +98,26 @@ notifiers:
   - type: discord
     enabled: true
     webhookUrlEnv: DISCORD_WEBHOOK_URL
+  - type: slack
+    enabled: true
+    webhookUrlEnv: SLACK_WEBHOOK_URL
+```
+
+Use the dashboard **Test** button next to each notifier to verify delivery.
+
+## JSON Source Example
+
+```yaml
+sources:
+  - id: json-api-demo
+    type: json
+    label: "JSON API demo"
+    url: "https://jsonplaceholder.typicode.com/posts"
+    itemsPath: ""
+    idFields: ["id"]
+    fields:
+      title: "title"
+      summary: "body"
 ```
 
 ## Rule Example
@@ -106,6 +137,24 @@ Supported operators:
 
 `<`, `<=`, `>`, `>=`, `==`, `!=`, `contains`, `not_contains`, `regex`, `exists`
 
+## Docker
+
+Build and run with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+Open `http://localhost:5173`.
+
+Optional Redis profile (for Upstash-compatible REST env vars):
+
+```bash
+docker compose --profile redis up --build
+```
+
+Set `STATE_DRIVER=redis` and `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` in `.env` when using Redis-backed state.
+
 ## Vercel Cron
 
 `vercel.json` schedules:
@@ -124,6 +173,7 @@ CRON_SECRET=your-long-random-secret
 DASHBOARD_SECRET=optional-dashboard-secret
 CONFIG_PATH=config.example.yml
 DISCORD_WEBHOOK_URL=...
+SLACK_WEBHOOK_URL=...
 ```
 
 For persistent deduplication on Vercel, add Upstash Redis and set:
@@ -151,7 +201,7 @@ settings:
 
 ## Responsible Scraping
 
-Check each target site's terms and robots.txt. Prefer official APIs, feeds, or export endpoints when they exist. Keep intervals reasonable and identify your bot with a clear user agent.
+Check each target site's terms and robots.txt. Prefer official APIs, feeds, or export endpoints when they exist. Keep intervals reasonable and identify your bot with a clear user agent. HTTP requests automatically retry with backoff on transient failures.
 
 ## Health Check
 
@@ -165,11 +215,19 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.2.0",
+    "version": "0.3.0",
     "uptime": 12.34
   }
 }
 ```
+
+## Config Validation
+
+```bash
+curl http://localhost:5173/api/config/validate
+```
+
+Returns warnings (missing env vars, empty rules) and errors (invalid references, schema issues).
 
 ## Scripts
 
@@ -192,11 +250,15 @@ src/web/                React dashboard
 src/server.ts           Local dashboard/API server
 api/cron/scrape.ts      Vercel Cron endpoint
 api/config.ts           Dashboard config endpoint
+api/config/validate.ts  Config validation endpoint
 api/health.ts           Health/version endpoint
 api/run.ts              Manual scrape endpoint
-src/sources/            HTML, RSS, and stock source adapters
+api/test-notifier.ts    Notifier test endpoint
+src/sources/            HTML, RSS, JSON, and stock source adapters
 src/rules.ts            Criteria engine and alert rendering
-src/notifiers/          Console, Discord, Telegram adapters
+src/notifiers/          Console, Discord, Telegram, Slack adapters
 src/state/              File, memory, and Upstash Redis state
 config.example.yml      Example watchlist and rules
+Dockerfile              Multi-stage production image
+docker-compose.yml      Local container orchestration
 ```

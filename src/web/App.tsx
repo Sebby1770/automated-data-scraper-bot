@@ -2,7 +2,9 @@ import {
   Activity,
   AlertTriangle,
   Bell,
+  Braces,
   CheckCircle2,
+  ClipboardCopy,
   Clock3,
   Database,
   Download,
@@ -15,12 +17,16 @@ import {
   Search,
   Shield,
   ShoppingBag,
-  TrendingUp
+  TrendingUp,
+  Wand2,
+  X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type SourceType = "html" | "rss" | "stooq";
-type NotifierType = "console" | "discord" | "telegram";
+type SourceType = "html" | "rss" | "stooq" | "json";
+type NotifierType = "console" | "discord" | "telegram" | "slack";
+type TestableNotifierType = "discord" | "telegram" | "slack";
+type RuleOperator = "<" | "<=" | ">" | ">=" | "==" | "!=" | "contains" | "not_contains" | "regex" | "exists";
 
 interface DashboardSource {
   id: string;
@@ -71,6 +77,14 @@ interface AlertItem {
   matchedAt: string;
 }
 
+interface SourceHealth {
+  sourceId: string;
+  sourceLabel: string;
+  lastFetchAt: string;
+  itemCount: number;
+  error?: string;
+}
+
 interface RunSummary {
   startedAt: string;
   finishedAt: string;
@@ -79,7 +93,14 @@ interface RunSummary {
   matchedCount: number;
   alertCount: number;
   errors: string[];
+  sourceHealth?: SourceHealth[];
   alerts?: AlertItem[];
+}
+
+interface ConfigValidationResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
 }
 
 interface ApiResponse<T> {
@@ -111,14 +132,18 @@ const MAX_RUN_HISTORY = 10;
 const sourceIcons: Record<SourceType, typeof ShoppingBag> = {
   html: ShoppingBag,
   rss: Rss,
-  stooq: TrendingUp
+  stooq: TrendingUp,
+  json: Braces
 };
 
 const sourceTone: Record<SourceType, string> = {
   html: "tone-teal",
   rss: "tone-amber",
-  stooq: "tone-blue"
+  stooq: "tone-blue",
+  json: "tone-violet"
 };
+
+const ruleOperators: RuleOperator[] = ["<", "<=", ">", ">=", "==", "!=", "contains", "not_contains", "regex", "exists"];
 
 export function App() {
   const [config, setConfig] = useState<DashboardConfig | null>(null);
@@ -129,6 +154,19 @@ export function App() {
   const [dryRun, setDryRun] = useState(true);
   const [secret, setSecret] = useState(() => window.localStorage.getItem("dashboardSecret") ?? "");
   const [ruleFilter, setRuleFilter] = useState("");
+  const [validation, setValidation] = useState<ConfigValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [testingNotifier, setTestingNotifier] = useState<TestableNotifierType | null>(null);
+  const [ruleBuilderOpen, setRuleBuilderOpen] = useState(false);
+  const [ruleDraft, setRuleDraft] = useState({
+    name: "",
+    source: "",
+    field: "price",
+    operator: "<=" as RuleOperator,
+    value: "",
+    message: ""
+  });
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
 
   const readyNotifiers = useMemo(() => config?.notifiers.filter((notifier) => notifier.ready).length ?? 0, [config]);
   const lastRunMs = useMemo(() => {
@@ -207,7 +245,57 @@ export function App() {
     }
   }, [dryRun, secret]);
 
-  const isBusy = status === "loading" || status === "running";
+  async function validateConfig() {
+    setValidating(true);
+    setError(null);
+
+    try {
+      const response = await fetch("/api/config/validate");
+      const payload = (await response.json()) as ApiResponse<ConfigValidationResult>;
+      if (!payload.ok || !payload.data) {
+        throw new Error(payload.error ?? "Config validation failed");
+      }
+      setValidation(payload.data);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setValidating(false);
+    }
+  }
+
+  async function testNotifier(type: TestableNotifierType) {
+    setTestingNotifier(type);
+    setError(null);
+    window.localStorage.setItem("dashboardSecret", secret);
+
+    try {
+      const response = await fetch("/api/test-notifier", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(secret ? { "x-dashboard-secret": secret } : {})
+        },
+        body: JSON.stringify({ type })
+      });
+      const payload = (await response.json()) as ApiResponse<{ type: TestableNotifierType; sentAt: string }>;
+      if (!payload.ok) {
+        throw new Error(payload.error ?? "Notifier test failed");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setTestingNotifier(null);
+    }
+  }
+
+  async function copyRuleYaml() {
+    const yaml = buildRuleYaml(ruleDraft);
+    await navigator.clipboard.writeText(yaml);
+    setCopyStatus("Rule YAML copied to clipboard");
+    setTimeout(() => setCopyStatus(null), 2500);
+  }
+
+  const isBusy = status === "loading" || status === "running" || validating;
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -257,6 +345,14 @@ export function App() {
             </button>
           </div>
 
+          <button className="secondary-button" type="button" onClick={validateConfig} disabled={isBusy}>
+            {validating ? <Loader2 className="spin" size={16} aria-hidden="true" /> : <Shield size={16} aria-hidden="true" />}
+            Validate config
+          </button>
+          <button className="secondary-button" type="button" onClick={() => setRuleBuilderOpen(true)} disabled={!config}>
+            <Wand2 size={16} aria-hidden="true" />
+            Rule builder
+          </button>
           <button className="icon-button" type="button" title="Refresh config" onClick={refreshConfig} disabled={isBusy}>
             <RefreshCw size={18} aria-hidden="true" />
           </button>
@@ -271,6 +367,36 @@ export function App() {
         <section className="status-banner error" role="alert">
           <AlertTriangle size={18} aria-hidden="true" />
           <span>{error}</span>
+        </section>
+      ) : null}
+
+      {validation ? (
+        <section className={`status-banner ${validation.valid ? "ok" : "error"}`} role="status">
+          {validation.valid ? <CheckCircle2 size={18} aria-hidden="true" /> : <AlertTriangle size={18} aria-hidden="true" />}
+          <div className="validation-copy">
+            <strong>{validation.valid ? "Config looks valid" : "Config has errors"}</strong>
+            {validation.errors.length > 0 ? (
+              <ul>
+                {validation.errors.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            ) : null}
+            {validation.warnings.length > 0 ? (
+              <ul className="warning-list">
+                {validation.warnings.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
+      {copyStatus ? (
+        <section className="status-banner ok" role="status">
+          <CheckCircle2 size={18} aria-hidden="true" />
+          <span>{copyStatus}</span>
         </section>
       ) : null}
 
@@ -305,7 +431,21 @@ export function App() {
               <p>{config?.settings.runIntervalSeconds ? `${config.settings.runIntervalSeconds}s interval` : "Waiting for config"}</p>
             </div>
           </div>
-          <NotifierList notifiers={config?.notifiers ?? []} />
+          <NotifierList
+            notifiers={config?.notifiers ?? []}
+            testingNotifier={testingNotifier}
+            onTest={testNotifier}
+          />
+        </div>
+
+        <div className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Source Health</h2>
+              <p>{runResult?.summary.sourceHealth?.length ? "Latest run per source" : "Run a scrape to populate health"}</p>
+            </div>
+          </div>
+          <SourceHealthPanel health={runResult?.summary.sourceHealth ?? []} />
         </div>
 
         <div className="panel wide-panel">
@@ -354,6 +494,16 @@ export function App() {
           <RunOutput result={runResult} />
         </div>
       </section>
+
+      {ruleBuilderOpen ? (
+        <RuleBuilderModal
+          sources={config?.sources ?? []}
+          draft={ruleDraft}
+          onChange={setRuleDraft}
+          onClose={() => setRuleBuilderOpen(false)}
+          onCopy={copyRuleYaml}
+        />
+      ) : null}
     </main>
   );
 }
@@ -454,22 +604,185 @@ function RuleTable({ rules }: { rules: DashboardRule[] }) {
   );
 }
 
-function NotifierList({ notifiers }: { notifiers: DashboardNotifier[] }) {
+function NotifierList({
+  notifiers,
+  testingNotifier,
+  onTest
+}: {
+  notifiers: DashboardNotifier[];
+  testingNotifier: TestableNotifierType | null;
+  onTest: (type: TestableNotifierType) => void;
+}) {
   if (notifiers.length === 0) {
     return <EmptyState label="No notifiers loaded" />;
   }
 
   return (
     <div className="notifier-list">
-      {notifiers.map((notifier) => (
-        <div className="notifier-row" key={notifier.type}>
-          <div>
-            <strong>{notifier.type}</strong>
-            <span>{notifier.enabled ? "Enabled" : "Disabled"}</span>
+      {notifiers.map((notifier) => {
+        const testable = notifier.type === "discord" || notifier.type === "telegram" || notifier.type === "slack";
+
+        return (
+          <div className="notifier-row" key={notifier.type}>
+            <div>
+              <strong>{notifier.type}</strong>
+              <span>{notifier.enabled ? "Enabled" : "Disabled"}</span>
+            </div>
+            <div className="notifier-actions">
+              {testable ? (
+                <button
+                  className="test-button"
+                  type="button"
+                  disabled={!notifier.ready || testingNotifier !== null}
+                  onClick={() => onTest(notifier.type as TestableNotifierType)}
+                >
+                  {testingNotifier === notifier.type ? <Loader2 className="spin" size={14} aria-hidden="true" /> : null}
+                  Test
+                </button>
+              ) : null}
+              <StatusPill ok={notifier.ready} label={notifier.ready ? "Ready" : notifier.missingEnv[0] ?? "Off"} />
+            </div>
           </div>
-          <StatusPill ok={notifier.ready} label={notifier.ready ? "Ready" : notifier.missingEnv[0] ?? "Off"} />
+        );
+      })}
+    </div>
+  );
+}
+
+function SourceHealthPanel({ health }: { health: SourceHealth[] }) {
+  if (health.length === 0) {
+    return <EmptyState label="No source health data yet" />;
+  }
+
+  return (
+    <div className="health-list">
+      {health.map((entry) => (
+        <div className="health-row" key={entry.sourceId}>
+          <div>
+            <strong>{entry.sourceLabel}</strong>
+            <span>
+              {entry.itemCount} items · {formatTimestamp(entry.lastFetchAt)}
+            </span>
+          </div>
+          <StatusPill ok={!entry.error} label={entry.error ? "Error" : "OK"} />
         </div>
       ))}
+      {health.some((entry) => entry.error) ? (
+        <div className="error-list compact">
+          {health
+            .filter((entry) => entry.error)
+            .map((entry) => (
+              <div key={`${entry.sourceId}-error`}>
+                <AlertTriangle size={16} aria-hidden="true" />
+                <span>
+                  {entry.sourceId}: {entry.error}
+                </span>
+              </div>
+            ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function RuleBuilderModal({
+  sources,
+  draft,
+  onChange,
+  onClose,
+  onCopy
+}: {
+  sources: DashboardSource[];
+  draft: {
+    name: string;
+    source: string;
+    field: string;
+    operator: RuleOperator;
+    value: string;
+    message: string;
+  };
+  onChange: (next: typeof draft) => void;
+  onClose: () => void;
+  onCopy: () => void;
+}) {
+  const yamlPreview = buildRuleYaml(draft);
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <div className="modal-panel" role="dialog" aria-modal="true" aria-labelledby="rule-builder-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-header">
+          <div>
+            <h2 id="rule-builder-title">Rule builder</h2>
+            <p>Compose a rule and copy the YAML snippet into your config file.</p>
+          </div>
+          <button className="icon-button" type="button" aria-label="Close rule builder" onClick={onClose}>
+            <X size={18} aria-hidden="true" />
+          </button>
+        </div>
+
+        <div className="rule-form">
+          <label>
+            Name
+            <input
+              value={draft.name}
+              onChange={(event) => onChange({ ...draft, name: event.target.value })}
+              placeholder="Retail item below budget"
+            />
+          </label>
+          <label>
+            Source
+            <select value={draft.source} onChange={(event) => onChange({ ...draft, source: event.target.value })}>
+              <option value="">Select source</option>
+              {sources.map((source) => (
+                <option key={source.id} value={source.id}>
+                  {source.label} ({source.id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Field
+            <input value={draft.field} onChange={(event) => onChange({ ...draft, field: event.target.value })} placeholder="price" />
+          </label>
+          <label>
+            Operator
+            <select
+              value={draft.operator}
+              onChange={(event) => onChange({ ...draft, operator: event.target.value as RuleOperator })}
+            >
+              {ruleOperators.map((operator) => (
+                <option key={operator} value={operator}>
+                  {operator}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Value
+            <input value={draft.value} onChange={(event) => onChange({ ...draft, value: event.target.value })} placeholder="35" />
+          </label>
+          <label className="full-width">
+            Message
+            <input
+              value={draft.message}
+              onChange={(event) => onChange({ ...draft, message: event.target.value })}
+              placeholder="{{title}} is {{price}}: {{url}}"
+            />
+          </label>
+        </div>
+
+        <pre className="yaml-preview">{yamlPreview}</pre>
+
+        <div className="modal-actions">
+          <button className="secondary-button" type="button" onClick={onClose}>
+            Close
+          </button>
+          <button className="primary-button" type="button" onClick={onCopy}>
+            <ClipboardCopy size={16} aria-hidden="true" />
+            Copy YAML
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -667,6 +980,47 @@ function csvEscape(value: string): string {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
+}
+
+function buildRuleYaml(draft: {
+  name: string;
+  source: string;
+  field: string;
+  operator: RuleOperator;
+  value: string;
+  message: string;
+}): string {
+  const ruleName = draft.name.trim() || "New rule";
+  const source = draft.source.trim() || "source-id";
+  const value = formatYamlValue(draft.value);
+  const messageLine = draft.message.trim() ? `\n    message: ${JSON.stringify(draft.message.trim())}` : "";
+
+  return [
+    "  - name: " + JSON.stringify(ruleName),
+    "    source: " + source,
+    "    all:",
+    "      - field: " + draft.field,
+    "        operator: " + draft.operator,
+    `        value: ${value}${messageLine}`
+  ].join("\n");
+}
+
+function formatYamlValue(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return '""';
+  }
+
+  const numeric = Number(trimmed);
+  if (!Number.isNaN(numeric) && trimmed === String(numeric)) {
+    return String(numeric);
+  }
+
+  if (trimmed === "true" || trimmed === "false") {
+    return trimmed;
+  }
+
+  return JSON.stringify(trimmed);
 }
 
 function downloadFile(filename: string, content: string, mimeType: string): void {
