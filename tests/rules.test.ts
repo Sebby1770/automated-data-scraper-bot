@@ -48,4 +48,16 @@ describe("rules", () => {
     const rule: RuleConfig = { name: "price dip", source: "stock" };
     expect(createAlert(item, rule).id).toBe(createAlert(item, rule).id);
   });
+
+  it("matches between, starts_with, and ends_with operators", () => {
+    expect(evaluateCondition(item, { field: "price", operator: "between", value: [150, 180] })).toBe(true);
+    expect(evaluateCondition(item, { field: "price", operator: "between", value: "200,250" })).toBe(false);
+    expect(evaluateCondition(item, { field: "symbol", operator: "starts_with", value: "tsla" })).toBe(true);
+    expect(evaluateCondition(item, { field: "symbol", operator: "ends_with", value: ".us" })).toBe(true);
+  });
+
+  it("copies rule severity onto alerts", () => {
+    const rule: RuleConfig = { name: "price dip", source: "stock", severity: "critical" };
+    expect(createAlert(item, rule).severity).toBe("critical");
+  });
 });

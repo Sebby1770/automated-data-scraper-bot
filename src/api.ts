@@ -16,7 +16,7 @@ import { sendTestNotification, type TestableNotifierType } from "./notifiers/ind
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.5.0";
+export const APP_VERSION = "0.6.0";
 
 export interface HealthResponse {
   version: string;

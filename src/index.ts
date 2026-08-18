@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import "dotenv/config";
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { alertsToCsv } from "./alerts-csv.js";
 import { loadConfig, resolveConfigPath } from "./config.js";
 import { logSummary, runOnce, watch } from "./runner.js";
 
@@ -20,10 +21,17 @@ try {
     await watch(config);
   } else if (command === "run") {
     const config = loadConfig(configPath);
+    const exportCsv = readFlag("--export-csv");
     const summary = await runOnce(config, {
-      dryRun: process.argv.includes("--dry-run")
+      dryRun: process.argv.includes("--dry-run"),
+      includeAlerts: Boolean(exportCsv)
     });
     logSummary(summary);
+    if (exportCsv && summary.alerts) {
+      const destination = resolve(process.cwd(), exportCsv);
+      writeFileSync(destination, alertsToCsv(summary.alerts), "utf8");
+      console.log(`Alerts exported: ${destination}`);
+    }
   } else {
     printHelp();
     process.exitCode = 1;
@@ -54,7 +62,7 @@ function initConfig(): void {
 
 function printHelp(): void {
   console.log(`Usage:
-  data-scraper-bot run [--config config.yml] [--dry-run]
+  data-scraper-bot run [--config config.yml] [--dry-run] [--export-csv alerts.csv]
   data-scraper-bot watch [--config config.yml]
   data-scraper-bot validate [--config config.yml]
   data-scraper-bot init`);

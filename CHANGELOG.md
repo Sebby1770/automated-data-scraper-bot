@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.0] - 2026-08-19
+
+### Added
+
+- Rule operators `between`, `starts_with`, and `ends_with`, including NL parser phrases.
+- Optional rule `severity` (`info` | `warning` | `critical`) copied onto alerts.
+- Per-rule or global `cooldownMinutes` so the same alert can re-fire after a window instead of remaining permanently deduped.
+- CSV export of alerts via `--export-csv` on `data-scraper-bot run`.
+
+### Changed
+
+- State stores now track `seenAt` timestamps so cooldown windows can be evaluated.
+- Bumped package version to `0.6.0`.
+
 ## [0.5.0] - 2026-07-05
 
 ### Added

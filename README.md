@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 [![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.5.0-teal)
+![Version](https://img.shields.io/badge/version-0.6.0-teal)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
 Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, or Slack when a rule matches.
@@ -25,6 +25,9 @@ It can run as a web app, a local long-lived process, a Docker container, a prote
 - Deduplicates alerts so the same rule/item pair is not sent repeatedly.
 - Sends alerts to console, Discord webhooks, Telegram bots, Slack incoming webhooks, or a generic JSON webhook.
 - Compares current values to price history with `changed_by`, `changed_pct`, `increased`, and `decreased` rule operators.
+- Matches ranges and prefixes with `between`, `starts_with`, and `ends_with`.
+- Tags alerts with `info` / `warning` / `critical` severity and optional `cooldownMinutes`.
+- Exports matched alerts to CSV.
 - Suppresses live notifier sends during configurable quiet hours while still recording alerts.
 - Exposes Prometheus metrics for scrape runs, alerts, sources, and last-run duration.
 - Retries HTTP requests with exponential backoff.
@@ -45,7 +48,7 @@ Then open:
 Run the bot without the dashboard:
 
 ```bash
-npm run scrape:once -- --dry-run
+npm run scrape:once -- --dry-run --export-csv alerts.csv
 ```
 
 Create your own editable config:
@@ -368,7 +371,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.5.0",
+    "version": "0.6.0",
     "uptime": 12.34
   }
 }

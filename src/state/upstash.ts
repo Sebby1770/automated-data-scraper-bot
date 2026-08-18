@@ -16,6 +16,11 @@ export class UpstashRedisStateStore implements StateStore {
     await this.request(`set/${encodeURIComponent(key)}/${encodeURIComponent(new Date().toISOString())}?EX=${this.ttlSeconds}`);
   }
 
+  async seenAt(key: string): Promise<string | undefined> {
+    const result = await this.request<{ result: unknown }>(`get/${encodeURIComponent(key)}`);
+    return typeof result.result === "string" ? result.result : undefined;
+  }
+
   private async request<T = unknown>(path: string): Promise<T> {
     const response = await fetch(`${this.restUrl.replace(/\/$/, "")}/${path}`, {
       headers: {
