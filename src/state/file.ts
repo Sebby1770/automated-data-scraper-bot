@@ -23,6 +23,10 @@ export class FileStateStore implements StateStore {
     this.persist();
   }
 
+  async seenAt(key: string): Promise<string | undefined> {
+    return this.load()[key];
+  }
+
   async prune(): Promise<void> {
     const state = this.load();
     const cutoff = Date.now() - this.ttlDays * 24 * 60 * 60 * 1000;

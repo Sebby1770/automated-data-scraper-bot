@@ -18,6 +18,7 @@ export interface BotSettings {
   priceHistoryFields?: string[];
   anomalyThresholdPercent?: number;
   quietHours?: QuietHoursSettings;
+  alertCooldownMinutes?: number;
 }
 
 export interface BaseSourceConfig {
@@ -75,7 +76,12 @@ export type RuleOperator =
   | "changed_by"
   | "changed_pct"
   | "increased"
-  | "decreased";
+  | "decreased"
+  | "between"
+  | "starts_with"
+  | "ends_with";
+
+export type AlertSeverity = "info" | "warning" | "critical";
 
 export interface RuleCondition {
   field: string;
@@ -89,6 +95,8 @@ export interface RuleConfig {
   all?: RuleCondition[];
   any?: RuleCondition[];
   message?: string;
+  severity?: AlertSeverity;
+  cooldownMinutes?: number;
 }
 
 export type NotifierConfig =
@@ -160,6 +168,7 @@ export interface Alert {
   message: string;
   item: DataItem;
   matchedAt: string;
+  severity?: AlertSeverity;
   anomaly?: AlertAnomaly;
   priceHistory?: PriceTrend;
 }

@@ -65,6 +65,18 @@ const OPERATOR_PHRASES: OperatorPhrase[] = [
   {
     operator: "exists",
     patterns: [/\bexists?\b/i, /\bis\s+present\b/i, /\bis\s+set\b/i, /\bhas\s+a\s+value\b/i]
+  },
+  {
+    operator: "between",
+    patterns: [/\bbetween\b/i, /\bin\s+range\b/i]
+  },
+  {
+    operator: "starts_with",
+    patterns: [/\bstarts?\s+with\b/i, /\bbegins?\s+with\b/i]
+  },
+  {
+    operator: "ends_with",
+    patterns: [/\bends?\s+with\b/i]
   }
 ];
 
@@ -228,6 +240,13 @@ function extractValue(
     return undefined;
   }
 
+  if (operatorMatch.operator === "between") {
+    const numbers = text.match(/[\d,]+(?:\.\d+)?/g) ?? [];
+    if (numbers.length >= 2) {
+      return [parseNumericToken(numbers[0]), parseNumericToken(numbers[1])];
+    }
+  }
+
   const phraseIndex = text.toLowerCase().indexOf(operatorMatch.phrase.toLowerCase());
   const tail = text.slice(phraseIndex + operatorMatch.phrase.length).trim();
   const head = text.slice(0, phraseIndex).trim();
@@ -243,6 +262,8 @@ function extractValue(
     (operatorMatch.operator === "contains" ||
       operatorMatch.operator === "not_contains" ||
       operatorMatch.operator === "regex" ||
+      operatorMatch.operator === "starts_with" ||
+      operatorMatch.operator === "ends_with" ||
       operatorMatch.operator === "==")
   ) {
     const candidate = tailWord[1].trim();

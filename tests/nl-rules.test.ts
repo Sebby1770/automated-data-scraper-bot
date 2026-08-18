@@ -26,6 +26,22 @@ describe("nl-rules", () => {
     expect(result.rule.value).toBe("apartment");
   });
 
+  it("parses between and starts_with phrases", () => {
+    const between = parseNlRule("alert when price is between 10 and 20");
+    expect(between.ok).toBe(true);
+    if (between.ok) {
+      expect(between.rule.operator).toBe("between");
+      expect(between.rule.value).toEqual([10, 20]);
+    }
+
+    const prefix = parseNlRule("notify if symbol starts with TSLA");
+    expect(prefix.ok).toBe(true);
+    if (prefix.ok) {
+      expect(prefix.rule.operator).toBe("starts_with");
+      expect(prefix.rule.value).toBe("TSLA");
+    }
+  });
+
   it("parses exists rules", () => {
     const result = parseNlRule("alert when url exists");
     expect(result.ok).toBe(true);

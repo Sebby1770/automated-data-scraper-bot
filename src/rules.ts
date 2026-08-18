@@ -42,6 +42,19 @@ export function evaluateCondition(item: DataItem, condition: RuleCondition, cont
       return !String(candidate ?? "").toLowerCase().includes(String(condition.value ?? "").toLowerCase());
     case "regex":
       return new RegExp(String(condition.value ?? ""), "i").test(String(candidate ?? ""));
+    case "starts_with":
+      return String(candidate ?? "").toLowerCase().startsWith(String(condition.value ?? "").toLowerCase());
+    case "ends_with":
+      return String(candidate ?? "").toLowerCase().endsWith(String(condition.value ?? "").toLowerCase());
+    case "between": {
+      const current = toNumber(candidate);
+      const range = Array.isArray(condition.value)
+        ? condition.value
+        : String(condition.value ?? "").split(",");
+      const min = toNumber(range[0]);
+      const max = toNumber(range[1]);
+      return current !== undefined && min !== undefined && max !== undefined && current >= min && current <= max;
+    }
     case "==":
       return String(candidate) === String(condition.value);
     case "!=":
@@ -99,7 +112,8 @@ export function createAlert(item: DataItem, rule: RuleConfig): Alert {
     url: item.url,
     message,
     item,
-    matchedAt
+    matchedAt,
+    severity: rule.severity ?? "info"
   };
 }
 

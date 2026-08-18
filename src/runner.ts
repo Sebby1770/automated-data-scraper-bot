@@ -5,6 +5,7 @@ import { recordScrapeRun } from "./metrics.js";
 import { createNotifiers } from "./notifiers/index.js";
 import type { Notifier } from "./notifiers/types.js";
 import { isQuietHours } from "./quiet-hours.js";
+import { resolveCooldownMinutes, shouldSkipDuplicate } from "./cooldown.js";
 import { evaluateRules } from "./rules.js";
 import { createSourceAdapter } from "./sources/index.js";
 import { createStateStore, type StateStore } from "./state/index.js";
@@ -78,7 +79,8 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
   const suppressNotifications = !options.dryRun && quietHoursActive;
 
   for (const match of matches) {
-    if (await state.has(match.alert.id)) {
+    const cooldown = resolveCooldownMinutes(match.rule, config.settings.alertCooldownMinutes);
+    if (await shouldSkipDuplicate(state, match.alert.id, cooldown)) {
       continue;
     }
 

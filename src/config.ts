@@ -28,7 +28,10 @@ const conditionSchema = z.object({
     "changed_by",
     "changed_pct",
     "increased",
-    "decreased"
+    "decreased",
+    "between",
+    "starts_with",
+    "ends_with"
   ]),
   value: z.unknown().optional()
 });
@@ -43,7 +46,8 @@ const settingsSchema = z
     digestMode: z.boolean().default(false),
     priceHistoryFields: z.array(z.string().min(1)).default(["price"]),
     anomalyThresholdPercent: z.number().positive().default(20),
-    quietHours: quietHoursSchema
+    quietHours: quietHoursSchema,
+    alertCooldownMinutes: z.number().int().nonnegative().optional()
   })
   .default({});
 
@@ -125,7 +129,9 @@ const configSchema = z.object({
         source: z.string().min(1),
         all: z.array(conditionSchema).optional(),
         any: z.array(conditionSchema).optional(),
-        message: z.string().optional()
+        message: z.string().optional(),
+        severity: z.enum(["info", "warning", "critical"]).optional(),
+        cooldownMinutes: z.number().int().nonnegative().optional()
       })
     )
     .default([]),
