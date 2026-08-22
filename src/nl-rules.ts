@@ -242,8 +242,9 @@ function extractValue(
 
   if (operatorMatch.operator === "between") {
     const numbers = text.match(/[\d,]+(?:\.\d+)?/g) ?? [];
-    if (numbers.length >= 2) {
-      return [parseNumericToken(numbers[0]), parseNumericToken(numbers[1])];
+    const [first, second] = numbers;
+    if (first !== undefined && second !== undefined) {
+      return [parseNumericToken(first), parseNumericToken(second)];
     }
   }
 

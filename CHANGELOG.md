@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-08-22
+
+### Added
+
+- Windowed rule operators that watch the recorded history instead of just the last
+  value: `trend_up`, `trend_down`, `above_avg_pct`, `below_avg_pct`, `min_of_window`,
+  and `max_of_window`, with a per-condition `window` (default 5). They stay quiet
+  until enough history has accumulated.
+- Per-rule notifier routing: notifiers accept a stable `id`, rules accept
+  `notify: [ids]` to target specific channels.
+- Per-notifier `minSeverity` floors so info-level alerts stay out of loud channels.
+- Alert snoozing: **Snooze 1h** button on every dashboard alert row, a `Snoozed`
+  badge and snoozed count in run summaries, and `POST /api/alerts/snooze`
+  (dashboard-secret protected). Snoozed alerts keep matching but are not delivered
+  (single or digest mode) until the snooze lapses; expiries are stored in the state
+  backend (file, memory, or Upstash Redis) via a new `markAt` capability.
+
+### Fixed
+
+- `npm run typecheck` failure on `main` (`nl-rules.ts` between-parser indexing),
+  which had turned CI red since v0.6.0.
+
 ## [0.6.0] - 2026-08-19
 
 ### Added

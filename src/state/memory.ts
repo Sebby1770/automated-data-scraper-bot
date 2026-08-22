@@ -11,6 +11,10 @@ export class MemoryStateStore implements StateStore {
     this.seen.set(key, timestamp);
   }
 
+  async markAt(key: string, timestamp: string): Promise<void> {
+    this.seen.set(key, timestamp);
+  }
+
   async seenAt(key: string): Promise<string | undefined> {
     return this.seen.get(key);
   }

@@ -25,8 +25,10 @@ It can run as a web app, a local long-lived process, a Docker container, a prote
 - Deduplicates alerts so the same rule/item pair is not sent repeatedly.
 - Sends alerts to console, Discord webhooks, Telegram bots, Slack incoming webhooks, or a generic JSON webhook.
 - Compares current values to price history with `changed_by`, `changed_pct`, `increased`, and `decreased` rule operators.
+- Watches trends across a history window with `trend_up`, `trend_down`, `above_avg_pct`, `below_avg_pct`, `min_of_window`, and `max_of_window` (e.g. "lowest price in the last 30 checks").
 - Matches ranges and prefixes with `between`, `starts_with`, and `ends_with`.
 - Tags alerts with `info` / `warning` / `critical` severity and optional `cooldownMinutes`.
+- Routes alerts per rule (`notify: [ops-telegram]`) and per notifier (`minSeverity: warning`), and lets you snooze noisy alerts for an hour from the dashboard.
 - Exports matched alerts to CSV.
 - Suppresses live notifier sends during configurable quiet hours while still recording alerts.
 - Exposes Prometheus metrics for scrape runs, alerts, sources, and last-run duration.
@@ -220,6 +222,36 @@ notifiers:
 
 Use the dashboard **Test** button next to each notifier to verify delivery.
 
+### Routing & Severity Floors
+
+Give a notifier a stable `id` and rules can target it with `notify`; add
+`minSeverity` to keep low-priority alerts out of loud channels:
+
+```yaml
+notifiers:
+  - type: telegram
+    id: ops-telegram
+    enabled: true
+  - type: discord
+    enabled: true
+    minSeverity: warning   # info alerts never reach Discord
+
+rules:
+  - name: "TSLA new 30-observation low"
+    source: tsla-stock
+    severity: critical
+    notify: [ops-telegram]  # only this notifier receives it
+```
+
+Rules without `notify` deliver to every enabled notifier whose severity floor allows it.
+
+### Snoozing Alerts
+
+Every alert row in the dashboard has a **Snooze 1h** button — the alert keeps
+matching (and shows a *Snoozed* badge) but is not delivered until the snooze
+lapses. Programmatic access: `POST /api/alerts/snooze` with
+`{ "id": "<alertId>", "minutes": 60 }` and the dashboard secret header.
+
 ## Quiet Hours
 
 Suppress live notifier sends overnight while still recording alerts in run output:
@@ -263,7 +295,39 @@ rules:
 
 Supported operators:
 
-`<`, `<=`, `>`, `>=`, `==`, `!=`, `contains`, `not_contains`, `regex`, `exists`, `changed_by`, `changed_pct`, `increased`, `decreased`
+`<`, `<=`, `>`, `>=`, `==`, `!=`, `contains`, `not_contains`, `regex`, `exists`, `changed_by`, `changed_pct`, `increased`, `decreased`, `between`, `starts_with`, `ends_with`, `trend_up`, `trend_down`, `above_avg_pct`, `below_avg_pct`, `min_of_window`, `max_of_window`
+
+### Windowed Operators
+
+The windowed operators look at the last `window` recorded observations for a field
+(including the current one — default 5, set per condition). They stay quiet until
+enough history has accumulated, so a fresh deployment never false-fires.
+
+```yaml
+rules:
+  - name: "TSLA new 30-observation low"
+    source: tsla-stock
+    severity: critical
+    all:
+      - field: price
+        operator: min_of_window
+        window: 30
+    message: "{{symbol}} hit {{price}} — its lowest in the last 30 checks."
+
+  - name: "10% below the 10-check moving average"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: below_avg_pct
+        value: 10
+        window: 10
+```
+
+| Operator | Matches when the current value… |
+|----------|--------------------------------|
+| `trend_up` / `trend_down` | rose / fell on every step of the window |
+| `above_avg_pct` / `below_avg_pct` | is ≥ `value`% above / below the prior-window average |
+| `min_of_window` / `max_of_window` | is a strict new low / high for the window |
 
 ## JSON Source Example
 

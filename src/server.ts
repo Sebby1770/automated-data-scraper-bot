@@ -14,8 +14,10 @@ import {
   readDashboardSecret,
   runScrapeResponse,
   sandboxTestResponse,
+  snoozeAlertResponse,
   testNotifierResponse,
   type DashboardRequestBody,
+  type SnoozeAlertRequestBody,
   type DigestPreviewRequestBody,
   type NlRuleRequestBody,
   type SandboxTestRequestBody,
@@ -82,6 +84,18 @@ app.post(
   async (request: Request<Record<string, never>, unknown, TestNotifierRequestBody>, response) => {
     try {
       const result = await testNotifierResponse(request.body ?? { type: "discord" }, readDashboardSecret(request.headers));
+      response.status(result.ok ? 200 : result.error === "Unauthorized" ? 401 : 400).json(result);
+    } catch (error) {
+      sendError(response, error);
+    }
+  }
+);
+
+app.post(
+  "/api/alerts/snooze",
+  async (request: Request<Record<string, never>, unknown, SnoozeAlertRequestBody>, response) => {
+    try {
+      const result = await snoozeAlertResponse(request.body ?? { id: "" }, readDashboardSecret(request.headers));
       response.status(result.ok ? 200 : result.error === "Unauthorized" ? 401 : 400).json(result);
     } catch (error) {
       sendError(response, error);

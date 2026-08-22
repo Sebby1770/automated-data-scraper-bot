@@ -1130,3 +1130,42 @@ tr:last-child td {
     min-width: 180px;
   }
 }
+
+.snoozed-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  border: 1px solid var(--border-strong);
+}
+
+.alert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snooze-button {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.snooze-button:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent-blue);
+}
+
+.snooze-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

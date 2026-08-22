@@ -13,10 +13,12 @@ import { buildDigestPreview } from "./digest.js";
 import { nlRuleToYaml, parseNlRule, type ParsedNlRule } from "./nl-rules.js";
 import { formatPrometheusMetrics } from "./metrics.js";
 import { sendTestNotification, type TestableNotifierType } from "./notifiers/index.js";
+import { snoozeAlert, type SnoozeResult } from "./snooze.js";
+import { createStateStore } from "./state/index.js";
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.7.0";
 
 export interface HealthResponse {
   version: string;
@@ -30,6 +32,11 @@ export interface DashboardRequestBody {
 
 export interface TestNotifierRequestBody {
   type: TestableNotifierType;
+}
+
+export interface SnoozeAlertRequestBody {
+  id: string;
+  minutes?: number;
 }
 
 export interface NlRuleRequestBody {
@@ -241,6 +248,40 @@ export function digestPreviewResponse(
     ok: true,
     data: buildDigestPreview(alerts)
   };
+}
+
+export async function snoozeAlertResponse(
+  body: SnoozeAlertRequestBody,
+  providedSecret?: string
+): Promise<DashboardApiResponse<SnoozeResult>> {
+  if (!isDashboardAuthorized(providedSecret)) {
+    return {
+      ok: false,
+      error: "Unauthorized"
+    };
+  }
+
+  if (!body.id?.trim()) {
+    return {
+      ok: false,
+      error: "Missing alert id"
+    };
+  }
+
+  try {
+    const config = loadConfig(process.env.CONFIG_PATH);
+    const state = createStateStore(config.settings.stateTtlDays);
+    const result = await snoozeAlert(state, body.id, body.minutes ?? 60);
+    return {
+      ok: true,
+      data: result
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 export async function testNotifierResponse(

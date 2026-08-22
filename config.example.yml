@@ -20,11 +20,14 @@ settings:
 notifiers:
   - type: console
     enabled: true
+    id: console            # optional stable id, referenced by rule-level `notify`
   - type: discord
     enabled: false
     webhookUrlEnv: DISCORD_WEBHOOK_URL
+    minSeverity: warning   # optional: only deliver warning/critical alerts here
   - type: telegram
     enabled: false
+    id: ops-telegram
     botTokenEnv: TELEGRAM_BOT_TOKEN
     chatIdEnv: TELEGRAM_CHAT_ID
   - type: slack
@@ -111,3 +114,33 @@ rules:
         operator: contains
         value: affordable
     message: "{{title}} {{url}}"
+
+  # Windowed operators watch the recorded price history, not just the last value.
+  # `window` counts observations including the current one (default 5).
+  - name: "TSLA new 30-observation low"
+    source: tsla-stock
+    severity: critical
+    notify: [ops-telegram]   # deliver only to the notifier with this id
+    all:
+      - field: price
+        operator: min_of_window
+        window: 30
+    message: "{{symbol}} hit {{price}} — its lowest in the last 30 checks."
+
+  - name: "TSLA trending up"
+    source: tsla-stock
+    all:
+      - field: price
+        operator: trend_up
+        window: 4
+    message: "{{symbol}} has risen 4 checks in a row (now {{price}})."
+
+  - name: "TSLA 10% below moving average"
+    source: tsla-stock
+    severity: warning
+    all:
+      - field: price
+        operator: below_avg_pct
+        value: 10
+        window: 10
+    message: "{{symbol}} at {{price}} is 10%+ below its 10-check average."

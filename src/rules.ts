@@ -91,6 +91,46 @@ export function evaluateCondition(item: DataItem, condition: RuleCondition, cont
         })
       );
     }
+    case "trend_up":
+      return compareToWindow(item, condition, context, ({ current, previous }) => {
+        const series = [...previous, current];
+        return series.every((value, index) => index === 0 || value > series[index - 1]!);
+      });
+    case "trend_down":
+      return compareToWindow(item, condition, context, ({ current, previous }) => {
+        const series = [...previous, current];
+        return series.every((value, index) => index === 0 || value < series[index - 1]!);
+      });
+    case "above_avg_pct": {
+      const threshold = toNumber(condition.value);
+      return (
+        threshold !== undefined &&
+        compareToWindow(item, condition, context, ({ current, previous }) => {
+          const average = previous.reduce((sum, value) => sum + value, 0) / previous.length;
+          if (average === 0) {
+            return false;
+          }
+          return current >= average * (1 + threshold / 100);
+        })
+      );
+    }
+    case "below_avg_pct": {
+      const threshold = toNumber(condition.value);
+      return (
+        threshold !== undefined &&
+        compareToWindow(item, condition, context, ({ current, previous }) => {
+          const average = previous.reduce((sum, value) => sum + value, 0) / previous.length;
+          if (average === 0) {
+            return false;
+          }
+          return current <= average * (1 - threshold / 100);
+        })
+      );
+    }
+    case "min_of_window":
+      return compareToWindow(item, condition, context, ({ current, previous }) => current < Math.min(...previous));
+    case "max_of_window":
+      return compareToWindow(item, condition, context, ({ current, previous }) => current > Math.max(...previous));
   }
 }
 
@@ -154,6 +194,54 @@ export function getPreviousHistoryValue(
   }
 
   return { current, previous };
+}
+
+export const DEFAULT_RULE_WINDOW = 5;
+
+export interface WindowValues {
+  current: number;
+  /** Prior observations, oldest first — excludes the current value. */
+  previous: number[];
+}
+
+/**
+ * Resolve the current value plus the `window` prior observations for a
+ * windowed operator. Returns undefined (condition fails) until enough
+ * history has accumulated.
+ */
+export function getWindowValues(
+  item: DataItem,
+  condition: RuleCondition,
+  context?: RuleEvaluationContext
+): WindowValues | undefined {
+  const current = toNumber(readField(item, condition.field));
+  if (current === undefined) {
+    return undefined;
+  }
+
+  const window = Math.max(2, Math.floor(condition.window ?? DEFAULT_RULE_WINDOW));
+  const history = context?.getHistory?.(item.sourceId, item.id, condition.field) ?? [];
+  // The last snapshot is the current observation (history is recorded before rules run).
+  const prior = history.slice(0, -1);
+  if (prior.length < window - 1) {
+    return undefined;
+  }
+
+  const previous = prior.slice(-(window - 1)).map((snapshot) => snapshot.value);
+  return { current, previous };
+}
+
+function compareToWindow(
+  item: DataItem,
+  condition: RuleCondition,
+  context: RuleEvaluationContext | undefined,
+  predicate: (values: WindowValues) => boolean
+): boolean {
+  const values = getWindowValues(item, condition, context);
+  if (!values || values.previous.length === 0) {
+    return false;
+  }
+  return predicate(values);
 }
 
 function compareToHistory(
