@@ -79,7 +79,13 @@ export type RuleOperator =
   | "decreased"
   | "between"
   | "starts_with"
-  | "ends_with";
+  | "ends_with"
+  | "trend_up"
+  | "trend_down"
+  | "above_avg_pct"
+  | "below_avg_pct"
+  | "min_of_window"
+  | "max_of_window";
 
 export type AlertSeverity = "info" | "warning" | "critical";
 
@@ -87,6 +93,8 @@ export interface RuleCondition {
   field: string;
   operator: RuleOperator;
   value?: unknown;
+  /** History window (number of observations) for windowed operators. Default 5. */
+  window?: number;
 }
 
 export interface RuleConfig {
@@ -97,34 +105,43 @@ export interface RuleConfig {
   message?: string;
   severity?: AlertSeverity;
   cooldownMinutes?: number;
+  /** Notifier ids to deliver this rule's alerts to. Default: all notifiers. */
+  notify?: string[];
+}
+
+export interface NotifierRouting {
+  /** Stable id used by rule-level routing (`notify`). Defaults to the notifier type. */
+  id?: string;
+  /** Only deliver alerts at or above this severity. */
+  minSeverity?: AlertSeverity;
 }
 
 export type NotifierConfig =
-  | {
+  | (NotifierRouting & {
       type: "console";
       enabled?: boolean;
-    }
-  | {
+    })
+  | (NotifierRouting & {
       type: "discord";
       enabled?: boolean;
       webhookUrlEnv?: string;
-    }
-  | {
+    })
+  | (NotifierRouting & {
       type: "telegram";
       enabled?: boolean;
       botTokenEnv?: string;
       chatIdEnv?: string;
-    }
-  | {
+    })
+  | (NotifierRouting & {
       type: "slack";
       enabled?: boolean;
       webhookUrlEnv?: string;
-    }
-  | {
+    })
+  | (NotifierRouting & {
       type: "webhook";
       enabled?: boolean;
       webhookUrlEnv?: string;
-    };
+    });
 
 export interface BotConfig {
   settings: BotSettings;
@@ -171,6 +188,9 @@ export interface Alert {
   severity?: AlertSeverity;
   anomaly?: AlertAnomaly;
   priceHistory?: PriceTrend;
+  /** True when the alert matched but delivery was suppressed by an active snooze. */
+  snoozed?: boolean;
+  snoozedUntil?: string;
 }
 
 export interface SourceHealth {
@@ -198,6 +218,7 @@ export interface RunSummary {
   itemCount: number;
   matchedCount: number;
   alertCount: number;
+  snoozedCount?: number;
   errors: string[];
   sourceHealth?: SourceHealth[];
   alerts?: Alert[];

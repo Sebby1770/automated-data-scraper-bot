@@ -4,7 +4,9 @@ import { sendDigest } from "./digest.js";
 import { recordScrapeRun } from "./metrics.js";
 import { createNotifiers } from "./notifiers/index.js";
 import type { Notifier } from "./notifiers/types.js";
+import { selectNotifiers } from "./notifiers/routing.js";
 import { isQuietHours } from "./quiet-hours.js";
+import { snoozedUntil } from "./snooze.js";
 import { resolveCooldownMinutes, shouldSkipDuplicate } from "./cooldown.js";
 import { evaluateRules } from "./rules.js";
 import { createSourceAdapter } from "./sources/index.js";
@@ -84,18 +86,27 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
       continue;
     }
 
-    const enrichedAlert = enrichAlert(match.alert, match.alert.item, priceHistory, anomalyThreshold);
+    let enrichedAlert = enrichAlert(match.alert, match.alert.item, priceHistory, anomalyThreshold);
+
+    const snoozeExpiry = await snoozedUntil(state, enrichedAlert.id);
+    if (snoozeExpiry) {
+      enrichedAlert = { ...enrichedAlert, snoozed: true, snoozedUntil: snoozeExpiry };
+      alerts.push(enrichedAlert);
+      continue;
+    }
+
     alerts.push(enrichedAlert);
 
     if (!options.dryRun && !digestMode && !suppressNotifications) {
-      await notifyAll(notifiers, enrichedAlert, errors);
+      await notifyAll(selectNotifiers(notifiers, enrichedAlert, match.rule.notify), enrichedAlert, errors);
       await state.mark(enrichedAlert.id);
     }
   }
 
-  if (!options.dryRun && digestMode && alerts.length > 0 && !suppressNotifications) {
-    await sendDigest(notifiers, alerts, errors);
-    for (const alert of alerts) {
+  const deliverableAlerts = alerts.filter((alert) => !alert.snoozed);
+  if (!options.dryRun && digestMode && deliverableAlerts.length > 0 && !suppressNotifications) {
+    await sendDigest(notifiers, deliverableAlerts, errors);
+    for (const alert of deliverableAlerts) {
       await state.mark(alert.id);
     }
   }
@@ -107,6 +118,7 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     itemCount: items.length,
     matchedCount: matches.length,
     alertCount: alerts.length,
+    snoozedCount: alerts.filter((alert) => alert.snoozed).length,
     errors,
     sourceHealth,
     digestMode,

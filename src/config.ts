@@ -31,9 +31,16 @@ const conditionSchema = z.object({
     "decreased",
     "between",
     "starts_with",
-    "ends_with"
+    "ends_with",
+    "trend_up",
+    "trend_down",
+    "above_avg_pct",
+    "below_avg_pct",
+    "min_of_window",
+    "max_of_window"
   ]),
-  value: z.unknown().optional()
+  value: z.unknown().optional(),
+  window: z.number().int().min(2).optional()
 });
 
 const settingsSchema = z
@@ -94,27 +101,37 @@ const sourceSchema = z.discriminatedUnion("type", [
 const notifierSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("console"),
-    enabled: z.boolean().optional()
+    enabled: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    minSeverity: z.enum(["info", "warning", "critical"]).optional()
   }),
   z.object({
     type: z.literal("discord"),
     enabled: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    minSeverity: z.enum(["info", "warning", "critical"]).optional(),
     webhookUrlEnv: z.string().default("DISCORD_WEBHOOK_URL")
   }),
   z.object({
     type: z.literal("telegram"),
     enabled: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    minSeverity: z.enum(["info", "warning", "critical"]).optional(),
     botTokenEnv: z.string().default("TELEGRAM_BOT_TOKEN"),
     chatIdEnv: z.string().default("TELEGRAM_CHAT_ID")
   }),
   z.object({
     type: z.literal("slack"),
     enabled: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    minSeverity: z.enum(["info", "warning", "critical"]).optional(),
     webhookUrlEnv: z.string().default("SLACK_WEBHOOK_URL")
   }),
   z.object({
     type: z.literal("webhook"),
     enabled: z.boolean().optional(),
+    id: z.string().min(1).optional(),
+    minSeverity: z.enum(["info", "warning", "critical"]).optional(),
     webhookUrlEnv: z.string().default("WEBHOOK_URL")
   })
 ]);
@@ -131,7 +148,8 @@ const configSchema = z.object({
         any: z.array(conditionSchema).optional(),
         message: z.string().optional(),
         severity: z.enum(["info", "warning", "critical"]).optional(),
-        cooldownMinutes: z.number().int().nonnegative().optional()
+        cooldownMinutes: z.number().int().nonnegative().optional(),
+        notify: z.array(z.string().min(1)).optional()
       })
     )
     .default([]),

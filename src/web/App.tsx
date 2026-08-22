@@ -123,6 +123,8 @@ interface AlertItem {
   matchedAt: string;
   anomaly?: AlertAnomaly;
   priceHistory?: PriceTrend;
+  snoozed?: boolean;
+  snoozedUntil?: string;
 }
 
 interface SourceHealth {
@@ -140,6 +142,7 @@ interface RunSummary {
   itemCount: number;
   matchedCount: number;
   alertCount: number;
+  snoozedCount?: number;
   errors: string[];
   sourceHealth?: SourceHealth[];
   alerts?: AlertItem[];
@@ -225,6 +228,7 @@ export function App() {
   const [validation, setValidation] = useState<ConfigValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
   const [testingNotifier, setTestingNotifier] = useState<TestableNotifierType | null>(null);
+  const [snoozingId, setSnoozingId] = useState<string | null>(null);
   const [ruleBuilderOpen, setRuleBuilderOpen] = useState(false);
   const [ruleDraft, setRuleDraft] = useState({
     name: "",
@@ -398,6 +402,47 @@ export function App() {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setTestingNotifier(null);
+    }
+  }
+
+  async function snoozeAlertById(alertId: string) {
+    setSnoozingId(alertId);
+    setError(null);
+    window.localStorage.setItem("dashboardSecret", secret);
+
+    try {
+      const response = await fetch("/api/alerts/snooze", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(secret ? { "x-dashboard-secret": secret } : {})
+        },
+        body: JSON.stringify({ id: alertId, minutes: 60 })
+      });
+      const payload = (await response.json()) as ApiResponse<{ alertId: string; snoozedUntil: string }>;
+      if (!payload.ok || !payload.data) {
+        throw new Error(payload.error ?? "Snooze failed");
+      }
+
+      const snoozedUntil = payload.data.snoozedUntil;
+      setRunResult((current) => {
+        if (!current?.summary.alerts) {
+          return current;
+        }
+        return {
+          ...current,
+          summary: {
+            ...current.summary,
+            alerts: current.summary.alerts.map((alert) =>
+              alert.id === alertId ? { ...alert, snoozed: true, snoozedUntil } : alert
+            )
+          }
+        };
+      });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setSnoozingId(null);
     }
   }
 
@@ -741,7 +786,12 @@ export function App() {
               {runResult ? <StatusPill ok={runResult.summary.errors.length === 0} /> : null}
             </div>
           </div>
-          <RunOutput result={runResult} digestPreview={digestPreview} />
+          <RunOutput
+            result={runResult}
+            digestPreview={digestPreview}
+            onSnooze={snoozeAlertById}
+            snoozingId={snoozingId}
+          />
         </div>
       </section>
 
@@ -1254,7 +1304,17 @@ function PriceSparkline({ trend }: { trend: PriceTrend }) {
   );
 }
 
-function RunOutput({ result, digestPreview }: { result: RunResult | null; digestPreview: string | null }) {
+function RunOutput({
+  result,
+  digestPreview,
+  onSnooze,
+  snoozingId
+}: {
+  result: RunResult | null;
+  digestPreview: string | null;
+  onSnooze?: (alertId: string) => void;
+  snoozingId?: string | null;
+}) {
   if (!result) {
     return <EmptyState label="Waiting for first run" />;
   }
@@ -1284,6 +1344,7 @@ function RunOutput({ result, digestPreview }: { result: RunResult | null; digest
         <span>{result.summary.itemCount} items</span>
         <span>{result.summary.matchedCount} matches</span>
         <span>{result.summary.alertCount} alerts</span>
+        {(result.summary.snoozedCount ?? 0) > 0 ? <span>{result.summary.snoozedCount} snoozed</span> : null}
       </div>
 
       {alerts.length > 0 ? (
@@ -1312,12 +1373,24 @@ function RunOutput({ result, digestPreview }: { result: RunResult | null; digest
 
       {digestPreview ? <pre className="digest-preview">{digestPreview}</pre> : null}
 
-      {alerts.length > 0 ? <GroupedAlerts alerts={alerts} /> : <EmptyState label="No alerts matched" />}
+      {alerts.length > 0 ? (
+        <GroupedAlerts alerts={alerts} onSnooze={onSnooze} snoozingId={snoozingId} />
+      ) : (
+        <EmptyState label="No alerts matched" />
+      )}
     </div>
   );
 }
 
-function GroupedAlerts({ alerts }: { alerts: AlertItem[] }) {
+function GroupedAlerts({
+  alerts,
+  onSnooze,
+  snoozingId
+}: {
+  alerts: AlertItem[];
+  onSnooze?: (alertId: string) => void;
+  snoozingId?: string | null;
+}) {
   const groups = useMemo(() => {
     const grouped = new Map<string, AlertItem[]>();
     for (const alert of alerts) {
@@ -1359,6 +1432,11 @@ function GroupedAlerts({ alerts }: { alerts: AlertItem[] }) {
                         {alert.anomaly ? (
                           <span className="anomaly-badge">Anomaly · {alert.anomaly.deviationPercent}%</span>
                         ) : null}
+                        {alert.snoozed ? (
+                          <span className="snoozed-badge" title={alert.snoozedUntil ? `Snoozed until ${formatTimestamp(alert.snoozedUntil)}` : undefined}>
+                            Snoozed
+                          </span>
+                        ) : null}
                       </div>
                       <strong>{alert.title}</strong>
                       <p>{alert.message}</p>
@@ -1367,11 +1445,24 @@ function GroupedAlerts({ alerts }: { alerts: AlertItem[] }) {
                         <PriceSparkline trend={alert.priceHistory} />
                       ) : null}
                     </div>
-                    {alert.url ? (
-                      <a href={alert.url} target="_blank" rel="noreferrer" title="Open alert target">
-                        <ExternalLink size={16} aria-hidden="true" />
-                      </a>
-                    ) : null}
+                    <div className="alert-actions">
+                      {onSnooze && !alert.snoozed ? (
+                        <button
+                          className="snooze-button"
+                          type="button"
+                          disabled={snoozingId === alert.id}
+                          onClick={() => onSnooze(alert.id)}
+                          title="Suppress this alert for 1 hour"
+                        >
+                          {snoozingId === alert.id ? "Snoozing…" : "Snooze 1h"}
+                        </button>
+                      ) : null}
+                      {alert.url ? (
+                        <a href={alert.url} target="_blank" rel="noreferrer" title="Open alert target">
+                          <ExternalLink size={16} aria-hidden="true" />
+                        </a>
+                      ) : null}
+                    </div>
                   </article>
                 ))}
               </div>

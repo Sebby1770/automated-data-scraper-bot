@@ -13,7 +13,11 @@ export class UpstashRedisStateStore implements StateStore {
   }
 
   async mark(key: string): Promise<void> {
-    await this.request(`set/${encodeURIComponent(key)}/${encodeURIComponent(new Date().toISOString())}?EX=${this.ttlSeconds}`);
+    await this.markAt(key, new Date().toISOString());
+  }
+
+  async markAt(key: string, timestamp: string): Promise<void> {
+    await this.request(`set/${encodeURIComponent(key)}/${encodeURIComponent(timestamp)}?EX=${this.ttlSeconds}`);
   }
 
   async seenAt(key: string): Promise<string | undefined> {

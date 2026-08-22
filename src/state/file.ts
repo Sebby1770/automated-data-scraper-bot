@@ -18,8 +18,12 @@ export class FileStateStore implements StateStore {
   }
 
   async mark(key: string): Promise<void> {
+    await this.markAt(key, new Date().toISOString());
+  }
+
+  async markAt(key: string, timestamp: string): Promise<void> {
     const state = this.load();
-    state[key] = new Date().toISOString();
+    state[key] = timestamp;
     this.persist();
   }
 

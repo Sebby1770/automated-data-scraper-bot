@@ -5,11 +5,14 @@ import { SlackNotifier } from "./slack.js";
 import { TelegramNotifier } from "./telegram.js";
 import { WebhookNotifier } from "./webhook.js";
 import type { Notifier } from "./types.js";
+import { RoutedNotifier } from "./routing.js";
 
 export type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook";
 
 export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
   const notifiers: Notifier[] = [];
+  const route = (config: NotifierConfig, notifier: Notifier): Notifier =>
+    new RoutedNotifier(notifier, config.id ?? config.type, config.minSeverity);
 
   for (const config of configs) {
     if (config.enabled === false) {
@@ -17,7 +20,7 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
     }
 
     if (config.type === "console") {
-      notifiers.push(new ConsoleNotifier());
+      notifiers.push(route(config, new ConsoleNotifier()));
       continue;
     }
 
@@ -28,7 +31,7 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
         console.warn(`Skipping Discord notifier because ${envName} is not set.`);
         continue;
       }
-      notifiers.push(new DiscordNotifier(webhookUrl));
+      notifiers.push(route(config, new DiscordNotifier(webhookUrl)));
       continue;
     }
 
@@ -41,7 +44,7 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
         console.warn(`Skipping Telegram notifier because ${tokenEnv} or ${chatEnv} is not set.`);
         continue;
       }
-      notifiers.push(new TelegramNotifier(token, chatId));
+      notifiers.push(route(config, new TelegramNotifier(token, chatId)));
       continue;
     }
 
@@ -52,7 +55,7 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
         console.warn(`Skipping Slack notifier because ${envName} is not set.`);
         continue;
       }
-      notifiers.push(new SlackNotifier(webhookUrl));
+      notifiers.push(route(config, new SlackNotifier(webhookUrl)));
       continue;
     }
 
@@ -63,11 +66,11 @@ export function createNotifiers(configs: NotifierConfig[]): Notifier[] {
         console.warn(`Skipping webhook notifier because ${envName} is not set.`);
         continue;
       }
-      notifiers.push(new WebhookNotifier(webhookUrl));
+      notifiers.push(route(config, new WebhookNotifier(webhookUrl)));
     }
   }
 
-  return notifiers.length > 0 ? notifiers : [new ConsoleNotifier()];
+  return notifiers.length > 0 ? notifiers : [new RoutedNotifier(new ConsoleNotifier(), "console")];
 }
 
 export function createTestNotifier(type: TestableNotifierType): Notifier {
