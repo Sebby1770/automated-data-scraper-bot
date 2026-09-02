@@ -16,7 +16,7 @@ import { sendTestNotification, type TestableNotifierType } from "./notifiers/ind
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.6.0";
+export const APP_VERSION = "0.7.0";
 
 export interface HealthResponse {
   version: string;
@@ -254,10 +254,10 @@ export async function testNotifierResponse(
     };
   }
 
-  if (!body.type || !["discord", "telegram", "slack", "webhook"].includes(body.type)) {
+  if (!body.type || !["discord", "telegram", "slack", "webhook", "imessage"].includes(body.type)) {
     return {
       ok: false,
-      error: 'Invalid notifier type. Expected "discord", "telegram", "slack", or "webhook".'
+      error: 'Invalid notifier type. Expected "discord", "telegram", "slack", "webhook", or "imessage".'
     };
   }
 

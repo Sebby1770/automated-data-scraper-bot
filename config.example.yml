@@ -5,7 +5,7 @@
 
 settings:
   runIntervalSeconds: 300
-  userAgent: "AutomatedDataScraperBot/0.5 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  userAgent: "AutomatedDataScraperBot/0.7 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
   requestTimeoutMs: 12000
   maxConcurrency: 4
   stateTtlDays: 30
@@ -33,6 +33,14 @@ notifiers:
   - type: webhook
     enabled: false
     webhookUrlEnv: WEBHOOK_URL
+  # Local macOS only. Live sends also require IMESSAGE_ALLOW_SEND=true.
+  - type: imessage
+    enabled: false
+    recipientEnv: IMESSAGE_RECIPIENT
+    allowSendEnv: IMESSAGE_ALLOW_SEND
+    timeoutMs: 15000
+    maxMessageLength: 1500
+    maxMessagesPerRun: 20
 
 sources:
   - id: tsla-stock

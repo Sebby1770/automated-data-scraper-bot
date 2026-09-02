@@ -28,8 +28,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 type SourceType = "html" | "rss" | "stooq" | "json";
-type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook";
-type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook";
+type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook" | "imessage";
+type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook" | "imessage";
 type RuleOperator =
   | "<"
   | "<="
@@ -68,6 +68,7 @@ interface DashboardNotifier {
   enabled: boolean;
   ready: boolean;
   missingEnv: string[];
+  reason?: string;
 }
 
 interface ConfigProfile {
@@ -878,13 +879,16 @@ function NotifierList({
           notifier.type === "discord" ||
           notifier.type === "telegram" ||
           notifier.type === "slack" ||
-          notifier.type === "webhook";
+          notifier.type === "webhook" ||
+          notifier.type === "imessage";
 
         return (
           <div className="notifier-row" key={notifier.type}>
             <div>
-              <strong>{notifier.type}</strong>
-              <span>{notifier.enabled ? "Enabled" : "Disabled"}</span>
+              <strong>{notifier.type === "imessage" ? "iMessage" : notifier.type}</strong>
+              <span>
+                {!notifier.enabled ? "Disabled" : notifier.ready ? "Enabled" : notifier.reason ?? "Needs setup"}
+              </span>
             </div>
             <div className="notifier-actions">
               {testable ? (
@@ -898,7 +902,10 @@ function NotifierList({
                   Test
                 </button>
               ) : null}
-              <StatusPill ok={notifier.ready} label={notifier.ready ? "Ready" : notifier.missingEnv[0] ?? "Off"} />
+              <StatusPill
+                ok={notifier.ready}
+                label={notifier.ready ? "Ready" : notifier.enabled ? "Setup" : "Off"}
+              />
             </div>
           </div>
         );

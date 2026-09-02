@@ -124,6 +124,15 @@ export type NotifierConfig =
       type: "webhook";
       enabled?: boolean;
       webhookUrlEnv?: string;
+    }
+  | {
+      type: "imessage";
+      enabled?: boolean;
+      recipientEnv?: string;
+      allowSendEnv?: string;
+      timeoutMs?: number;
+      maxMessageLength?: number;
+      maxMessagesPerRun?: number;
     };
 
 export interface BotConfig {

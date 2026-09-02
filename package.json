@@ -1,7 +1,7 @@
 {
   "name": "automated-data-scraper-bot",
-  "version": "0.6.0",
-  "description": "Config-driven bot that watches retail, housing, and stock data sources and sends Telegram or Discord alerts when rules match.",
+  "version": "0.7.0",
+  "description": "Config-driven bot that watches retail, housing, stock, and JSON data sources and routes rule alerts to local or remote notification channels.",
   "type": "module",
   "private": false,
   "engines": {
@@ -15,6 +15,7 @@
     "bot:watch": "tsx watch src/index.ts watch",
     "dev": "tsx src/server.ts",
     "mcp": "tsx src/mcp-server.ts",
+    "notify:test": "tsx src/index.ts test-notifier",
     "lint": "eslint .",
     "scrape:once": "tsx src/index.ts run",
     "scrape:watch": "tsx src/index.ts watch",

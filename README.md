@@ -2,10 +2,10 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 [![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.6.0-teal)
+![Version](https://img.shields.io/badge/version-0.7.0-teal)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
-Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, or Slack when a rule matches.
+Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, Slack, webhooks, or the macOS Messages app when a rule matches.
 
 It can run as a web app, a local long-lived process, a Docker container, a protected Vercel Cron endpoint, or an MCP tool server for Claude Desktop / Cursor.
 
@@ -23,7 +23,7 @@ It can run as a web app, a local long-lived process, a Docker container, a prote
 - Fetches JSON REST APIs with dot-notation field mappings.
 - Evaluates `all` and `any` rule conditions.
 - Deduplicates alerts so the same rule/item pair is not sent repeatedly.
-- Sends alerts to console, Discord webhooks, Telegram bots, Slack incoming webhooks, or a generic JSON webhook.
+- Sends alerts to console, Discord webhooks, Telegram bots, Slack incoming webhooks, a generic JSON webhook, or iMessage on a local Mac.
 - Compares current values to price history with `changed_by`, `changed_pct`, `increased`, and `decreased` rule operators.
 - Matches ranges and prefixes with `between`, `starts_with`, and `ends_with`.
 - Tags alerts with `info` / `warning` / `critical` severity and optional `cooldownMinutes`.
@@ -97,7 +97,7 @@ Dashboard highlights in v0.4.0:
 - **Digest preview** — preview batched alert summaries before enabling `digestMode` in config
 - **Validate config** button — surfaces warnings/errors before you run
 - **Rule builder** modal — compose a rule and copy YAML to your clipboard
-- **Notifier test** buttons — send a test alert to Discord, Telegram, or Slack
+- **Notifier test** buttons — send a test alert to Discord, Telegram, Slack, or iMessage
 - **Source health** panel — per-source item counts, timestamps, and errors from the latest run
 - Run history panel (last 10 runs, stored in browser `localStorage` as `scraperRunHistory`)
 - Export matched alerts as JSON or CSV
@@ -105,7 +105,7 @@ Dashboard highlights in v0.4.0:
 - `Ctrl+Enter` to run a scrape
 - Prominent run timestamps and duration in the output panel
 
-Manual runs default to dry-run mode, which shows matching alerts without sending notifications. Switch to live alerts in the dashboard when you want notification adapters to send.
+Manual runs default to dry-run mode, which shows matching alerts without constructing or sending through notification adapters. Switch to live alerts in the dashboard only when you want configured adapters to send.
 
 To protect manual runs and notifier tests on a deployed dashboard, set:
 
@@ -201,6 +201,8 @@ TELEGRAM_BOT_TOKEN=123456:abc...
 TELEGRAM_CHAT_ID=123456789
 SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
 WEBHOOK_URL=https://your-service.example.com/alerts
+IMESSAGE_RECIPIENT=you@example.com
+IMESSAGE_ALLOW_SEND=false
 ```
 
 Enable the notifier in `config.yml`:
@@ -219,6 +221,53 @@ notifiers:
 ```
 
 Use the dashboard **Test** button next to each notifier to verify delivery.
+
+## macOS Messages / iMessage
+
+The iMessage adapter is an outbound, local-macOS integration. It asks the signed-in Messages app to send one alert at a time through `/usr/bin/osascript`; it does not read conversations or the Messages database. It cannot run on Vercel, Linux, Windows, or the provided Docker image.
+
+1. Open Messages on the Mac and sign in to the Apple Account that will send alerts.
+2. Set one recipient in `.env`, but leave live sending locked while you verify scraping:
+
+   ```bash
+   IMESSAGE_RECIPIENT=you@example.com
+   IMESSAGE_ALLOW_SEND=false
+   npm run scrape:once -- --dry-run
+   ```
+
+3. Add and enable the notifier in `config.yml`:
+
+   ```yaml
+   notifiers:
+     - type: imessage
+       enabled: true
+       recipientEnv: IMESSAGE_RECIPIENT
+       allowSendEnv: IMESSAGE_ALLOW_SEND
+       timeoutMs: 15000
+       maxMessageLength: 1500
+       maxMessagesPerRun: 20
+   ```
+
+4. When the dry-run output is correct, change `IMESSAGE_ALLOW_SEND` to `true` in `.env`, then send one test:
+
+   ```bash
+   npm run notify:test -- imessage
+   ```
+
+On the first test, macOS may ask whether the calling app may control Messages. Grant the caller (for example Terminal, iTerm, Codex, or Node) access under **System Settings → Privacy & Security → Automation**. If macOS previously denied it, enable the Messages toggle there and retry. Messages must remain signed in.
+
+iMessage delivery works directly from a signed-in Mac. Sending SMS, MMS, or RCS to recipients who are not available through iMessage additionally requires a paired iPhone with **Text Message Forwarding** configured for that Mac.
+
+Safety defaults:
+
+- `IMESSAGE_ALLOW_SEND` must be exactly `true`; `1`, `yes`, and other values stay locked.
+- Only one email address or phone number is accepted—recipient lists are rejected.
+- Recipient and alert text are passed as separate process arguments, never interpolated into AppleScript or a shell.
+- Messages are truncated at `maxMessageLength`, and a notifier stops at `maxMessagesPerRun` each scrape pass.
+- Dashboard dry runs and CLI `--dry-run` runs never launch `osascript`.
+- Quiet hours and normal alert deduplication also apply to iMessage.
+
+You can also use the local dashboard **Test** button after its iMessage row reports Ready. The test endpoint remains protected by `DASHBOARD_SECRET` when configured.
 
 ## Quiet Hours
 
@@ -332,6 +381,8 @@ DISCORD_WEBHOOK_URL=...
 SLACK_WEBHOOK_URL=...
 ```
 
+The iMessage notifier is deliberately local-macOS-only and will report **macOS only** rather than attempting delivery from Vercel.
+
 For persistent deduplication on Vercel, add Upstash Redis and set:
 
 ```bash
@@ -371,7 +422,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.6.0",
+    "version": "0.7.0",
     "uptime": 12.34
   }
 }
@@ -413,6 +464,7 @@ last_run_duration_ms 1240
 ```bash
 npm run dev
 npm run mcp
+npm run notify:test -- imessage
 npm run app:build
 npm run app:start
 npm run scrape:once
@@ -443,7 +495,7 @@ api/run.ts              Manual scrape endpoint
 api/test-notifier.ts    Notifier test endpoint
 src/sources/            HTML, RSS, JSON, and stock source adapters
 src/rules.ts            Criteria engine and alert rendering
-src/notifiers/          Console, Discord, Telegram, Slack, Webhook adapters
+src/notifiers/          Console, chat, webhook, and macOS iMessage adapters
 configs/                Example config profiles for dashboard switching
 src/state/              File, memory, and Upstash Redis state
 config.example.yml      Example watchlist and rules

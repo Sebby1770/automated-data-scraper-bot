@@ -8,7 +8,12 @@ class CaptureNotifier implements Notifier {
   readonly name = "capture";
   readonly alerts: Alert[] = [];
 
+  constructor(private readonly fail = false) {}
+
   async send(alert: Alert): Promise<void> {
+    if (this.fail) {
+      throw new Error("simulated delivery failure");
+    }
     this.alerts.push(alert);
   }
 }
@@ -61,5 +66,22 @@ describe("runOnce", () => {
     expect(first.alertCount).toBe(1);
     expect(second.alertCount).toBe(0);
     expect(notifier.alerts).toHaveLength(1);
+
+    // A failed delivery must remain eligible for the next run instead of
+    // being incorrectly deduplicated as if a notifier had succeeded.
+    const retryState = new MemoryStateStore();
+    const failed = await runOnce(config, {
+      stateStore: retryState,
+      notifiers: [new CaptureNotifier(true)]
+    });
+    const retriedNotifier = new CaptureNotifier();
+    const retried = await runOnce(config, {
+      stateStore: retryState,
+      notifiers: [retriedNotifier]
+    });
+    expect(failed.errors).toContain("capture: simulated delivery failure");
+    expect(failed.alertCount).toBe(1);
+    expect(retried.alertCount).toBe(1);
+    expect(retriedNotifier.alerts).toHaveLength(1);
   });
 });

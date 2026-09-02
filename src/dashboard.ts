@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse } from "yaml";
 import { loadConfig } from "./config.js";
+import { getIMessageReadiness } from "./notifiers/index.js";
 import { isQuietHours } from "./quiet-hours.js";
 import { runOnce } from "./runner.js";
 import { createMemoryPriceHistoryStore } from "./state/price-history.js";
@@ -30,6 +31,7 @@ export interface DashboardNotifier {
   enabled: boolean;
   ready: boolean;
   missingEnv: string[];
+  reason?: string;
 }
 
 export interface DashboardConfig {
@@ -192,6 +194,17 @@ function summarizeNotifier(notifier: NotifierConfig): DashboardNotifier {
       enabled,
       ready: enabled && Boolean(process.env[envName]),
       missingEnv: enabled && !process.env[envName] ? [envName] : []
+    };
+  }
+
+  if (notifier.type === "imessage") {
+    const readiness = getIMessageReadiness(notifier);
+    return {
+      type: notifier.type,
+      enabled,
+      ready: enabled && readiness.ready,
+      missingEnv: enabled ? readiness.missingEnv : [],
+      reason: readiness.reason
     };
   }
 

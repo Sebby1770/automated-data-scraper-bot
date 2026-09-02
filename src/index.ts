@@ -4,6 +4,7 @@ import { copyFileSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { alertsToCsv } from "./alerts-csv.js";
 import { loadConfig, resolveConfigPath } from "./config.js";
+import { sendTestNotification, type TestableNotifierType } from "./notifiers/index.js";
 import { logSummary, runOnce, watch } from "./runner.js";
 
 const command = process.argv[2] ?? "run";
@@ -32,6 +33,13 @@ try {
       writeFileSync(destination, alertsToCsv(summary.alerts), "utf8");
       console.log(`Alerts exported: ${destination}`);
     }
+  } else if (command === "test-notifier") {
+    const notifierType = process.argv[3];
+    if (!isTestableNotifierType(notifierType)) {
+      throw new Error('Choose a notifier: "discord", "telegram", "slack", "webhook", or "imessage".');
+    }
+    await sendTestNotification(notifierType);
+    console.log(`${notifierType === "imessage" ? "iMessage" : notifierType} test notification sent.`);
   } else {
     printHelp();
     process.exitCode = 1;
@@ -60,10 +68,15 @@ function initConfig(): void {
   console.log("Created config.yml from config.example.yml.");
 }
 
+function isTestableNotifierType(value: string | undefined): value is TestableNotifierType {
+  return Boolean(value && ["discord", "telegram", "slack", "webhook", "imessage"].includes(value));
+}
+
 function printHelp(): void {
   console.log(`Usage:
   data-scraper-bot run [--config config.yml] [--dry-run] [--export-csv alerts.csv]
   data-scraper-bot watch [--config config.yml]
   data-scraper-bot validate [--config config.yml]
+  data-scraper-bot test-notifier <discord|telegram|slack|webhook|imessage>
   data-scraper-bot init`);
 }

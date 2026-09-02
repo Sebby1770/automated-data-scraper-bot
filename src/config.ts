@@ -116,6 +116,15 @@ const notifierSchema = z.discriminatedUnion("type", [
     type: z.literal("webhook"),
     enabled: z.boolean().optional(),
     webhookUrlEnv: z.string().default("WEBHOOK_URL")
+  }),
+  z.object({
+    type: z.literal("imessage"),
+    enabled: z.boolean().optional(),
+    recipientEnv: z.string().min(1).default("IMESSAGE_RECIPIENT"),
+    allowSendEnv: z.string().min(1).default("IMESSAGE_ALLOW_SEND"),
+    timeoutMs: z.number().int().min(1_000).max(60_000).default(15_000),
+    maxMessageLength: z.number().int().min(100).max(5_000).default(1_500),
+    maxMessagesPerRun: z.number().int().min(1).max(100).default(20)
   })
 ]);
 
@@ -320,6 +329,27 @@ function collectConfigIssues(config: BotConfig, issues: ConfigValidationIssue[])
       const envName = notifier.webhookUrlEnv ?? "WEBHOOK_URL";
       if (!process.env[envName]) {
         issues.push({ level: "warning", message: `Webhook notifier enabled but ${envName} is not set` });
+      }
+    }
+
+    if (notifier.type === "imessage") {
+      const recipientEnv = notifier.recipientEnv ?? "IMESSAGE_RECIPIENT";
+      const allowSendEnv = notifier.allowSendEnv ?? "IMESSAGE_ALLOW_SEND";
+
+      if (process.platform !== "darwin") {
+        issues.push({
+          level: "warning",
+          message: "iMessage notifier is enabled but can run only on a local macOS host"
+        });
+      }
+      if (!process.env[recipientEnv]) {
+        issues.push({ level: "warning", message: `iMessage notifier enabled but ${recipientEnv} is not set` });
+      }
+      if (process.env[allowSendEnv] !== "true") {
+        issues.push({
+          level: "warning",
+          message: `iMessage sending is locked; set ${allowSendEnv}=true only after testing in dry-run mode`
+        });
       }
     }
   }

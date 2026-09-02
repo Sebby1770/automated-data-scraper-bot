@@ -25,9 +25,12 @@ export interface RunOptions {
 
 export async function runOnce(config: BotConfig, options: RunOptions = {}): Promise<RunSummary> {
   const startedAt = new Date().toISOString();
+  const dryRun = options.dryRun === true;
+  const quietHoursActive = isQuietHours(config.settings.quietHours);
+  const suppressNotifications = !dryRun && quietHoursActive;
   const state = options.stateStore ?? createStateStore(config.settings.stateTtlDays);
   const priceHistory = options.priceHistoryStore ?? createPriceHistoryStore();
-  const notifiers = options.notifiers ?? createNotifiers(config.notifiers);
+  const notifiers = options.notifiers ?? (dryRun || suppressNotifications ? [] : createNotifiers(config.notifiers));
   const adapters = config.sources.map((source) =>
     createSourceAdapter(source, {
       userAgent: config.settings.userAgent,
@@ -75,9 +78,6 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
   };
   const matches = items.flatMap((item) => evaluateRules(item, config.rules, ruleContext));
   const alerts: Alert[] = [];
-  const quietHoursActive = isQuietHours(config.settings.quietHours);
-  const suppressNotifications = !options.dryRun && quietHoursActive;
-
   for (const match of matches) {
     const cooldown = resolveCooldownMinutes(match.rule, config.settings.alertCooldownMinutes);
     if (await shouldSkipDuplicate(state, match.alert.id, cooldown)) {
@@ -87,16 +87,20 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
     const enrichedAlert = enrichAlert(match.alert, match.alert.item, priceHistory, anomalyThreshold);
     alerts.push(enrichedAlert);
 
-    if (!options.dryRun && !digestMode && !suppressNotifications) {
-      await notifyAll(notifiers, enrichedAlert, errors);
-      await state.mark(enrichedAlert.id);
+    if (!dryRun && !digestMode && !suppressNotifications) {
+      const deliveredCount = await notifyAll(notifiers, enrichedAlert, errors);
+      if (deliveredCount > 0) {
+        await state.mark(enrichedAlert.id);
+      }
     }
   }
 
-  if (!options.dryRun && digestMode && alerts.length > 0 && !suppressNotifications) {
-    await sendDigest(notifiers, alerts, errors);
-    for (const alert of alerts) {
-      await state.mark(alert.id);
+  if (!dryRun && digestMode && alerts.length > 0 && !suppressNotifications) {
+    const deliveredCount = await sendDigest(notifiers, alerts, errors);
+    if (deliveredCount > 0) {
+      for (const alert of alerts) {
+        await state.mark(alert.id);
+      }
     }
   }
 
@@ -210,14 +214,19 @@ export function directionFromChange(changePercent: number | undefined): PriceTre
   return "flat";
 }
 
-async function notifyAll(notifiers: Notifier[], alert: Alert, errors: string[]): Promise<void> {
+async function notifyAll(notifiers: Notifier[], alert: Alert, errors: string[]): Promise<number> {
+  let deliveredCount = 0;
+
   for (const notifier of notifiers) {
     try {
       await notifier.send(alert);
+      deliveredCount += 1;
     } catch (error) {
       errors.push(`${notifier.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  return deliveredCount;
 }
 
 async function mapLimit<T, R>(items: T[], concurrency: number, worker: (item: T) => Promise<R>): Promise<R[]> {

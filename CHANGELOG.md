@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-09-02
+
+### Added
+
+- Local macOS Messages/iMessage notifier with dashboard and CLI test support.
+- Explicit `IMESSAGE_ALLOW_SEND=true` live-send lock, one-recipient validation, bounded message length, and a per-run send cap.
+- Readiness diagnostics for missing environment variables, locked sending, invalid recipients, and non-macOS hosts.
+- Mock-boundary tests covering argv isolation, platform refusal, volume limits, error redaction, and readiness checks.
+
+### Changed
+
+- Dry-run and quiet-hours runs no longer construct notification adapters, making the no-send boundary explicit.
+- Alerts are marked as delivered only after at least one notifier succeeds, allowing all-failure runs to retry next time.
+- Dashboard notifier rows now surface iMessage setup state and allow a protected test send when ready.
+- Bumped package version to `0.7.0`.
+
 ## [0.6.0] - 2026-08-19
 
 ### Added

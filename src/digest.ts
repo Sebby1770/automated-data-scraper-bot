@@ -41,20 +41,24 @@ export function buildDigestPreview(alerts: Alert[]): DigestPreview {
   };
 }
 
-export async function sendDigest(notifiers: Notifier[], alerts: Alert[], errors: string[]): Promise<void> {
+export async function sendDigest(notifiers: Notifier[], alerts: Alert[], errors: string[]): Promise<number> {
   if (alerts.length === 0) {
-    return;
+    return 0;
   }
 
   const digestAlert = createDigestAlert(alerts);
+  let deliveredCount = 0;
 
   for (const notifier of notifiers) {
     try {
       await notifier.send(digestAlert);
+      deliveredCount += 1;
     } catch (error) {
       errors.push(`${notifier.name}: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
+
+  return deliveredCount;
 }
 
 function createDigestAlert(alerts: Alert[]): Alert {
