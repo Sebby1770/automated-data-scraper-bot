@@ -11,6 +11,8 @@ import {
   getHealthResponse,
   getMetricsResponse,
   parseNlRuleResponse,
+  previewHttpStatus,
+  previewSourceResponse,
   readDashboardSecret,
   runScrapeResponse,
   sandboxTestResponse,
@@ -18,6 +20,7 @@ import {
   type DashboardRequestBody,
   type DigestPreviewRequestBody,
   type NlRuleRequestBody,
+  type PreviewRequestBody,
   type SandboxTestRequestBody,
   type TestNotifierRequestBody
 } from "./api.js";
@@ -72,6 +75,15 @@ app.post("/api/run", async (request: Request<Record<string, never>, unknown, Das
   try {
     const result = await runScrapeResponse(request.body ?? {}, readDashboardSecret(request.headers));
     response.status(result.ok ? 200 : 401).json(result);
+  } catch (error) {
+    sendError(response, error);
+  }
+});
+
+app.post("/api/preview", async (request: Request<Record<string, never>, unknown, PreviewRequestBody>, response) => {
+  try {
+    const result = await previewSourceResponse(request.body ?? {}, readDashboardSecret(request.headers));
+    response.status(previewHttpStatus(result)).json(result);
   } catch (error) {
     sendError(response, error);
   }

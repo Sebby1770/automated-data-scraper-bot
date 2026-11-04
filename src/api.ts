@@ -13,10 +13,11 @@ import { buildDigestPreview } from "./digest.js";
 import { nlRuleToYaml, parseNlRule, type ParsedNlRule } from "./nl-rules.js";
 import { formatPrometheusMetrics } from "./metrics.js";
 import { sendTestNotification, type TestableNotifierType } from "./notifiers/index.js";
+import { previewDashboardSource, type SourcePreview } from "./preview.js";
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.10.0";
+export const APP_VERSION = "0.11.0";
 
 export interface HealthResponse {
   version: string;
@@ -25,6 +26,11 @@ export interface HealthResponse {
 
 export interface DashboardRequestBody {
   dryRun?: boolean;
+  configPath?: string;
+}
+
+export interface PreviewRequestBody {
+  sourceId?: string;
   configPath?: string;
 }
 
@@ -128,6 +134,57 @@ export async function runScrapeResponse(
       dryRun: body.dryRun
     })
   };
+}
+
+export async function previewSourceResponse(
+  body: PreviewRequestBody,
+  providedSecret?: string
+): Promise<DashboardApiResponse<SourcePreview>> {
+  if (!isDashboardAuthorized(providedSecret)) {
+    return {
+      ok: false,
+      error: "Unauthorized"
+    };
+  }
+
+  const sourceId = body.sourceId?.trim() ?? "";
+  if (!sourceId) {
+    return {
+      ok: false,
+      error: "Missing sourceId"
+    };
+  }
+
+  try {
+    return {
+      ok: true,
+      data: await previewDashboardSource({
+        sourceId,
+        configPath: resolveRequestConfigPath(body.configPath)
+      })
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+export function previewHttpStatus(result: { ok: boolean; error?: string }): number {
+  if (result.ok) {
+    return 200;
+  }
+  if (result.error === "Unauthorized") {
+    return 401;
+  }
+  if (result.error === "Missing sourceId") {
+    return 400;
+  }
+  if (result.error?.startsWith("Unknown source id")) {
+    return 404;
+  }
+  return 500;
 }
 
 export function getConfigValidationResponse(configPath?: string): DashboardApiResponse<ConfigValidationResult> {

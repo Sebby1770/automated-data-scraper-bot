@@ -13,6 +13,9 @@
     },
     "api/run.ts": {
       "maxDuration": 60
+    },
+    "api/preview.ts": {
+      "maxDuration": 60
     }
   }
 }

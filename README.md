@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 [![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.10.0-teal)
+![Version](https://img.shields.io/badge/version-0.11.0-teal)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
 Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, Slack, webhooks, or the macOS Messages app when a rule matches.
@@ -79,6 +79,7 @@ GET  /api/config/validate
 GET  /api/health
 GET  /api/metrics
 POST /api/run
+POST /api/preview
 POST /api/test-notifier
 POST /api/nl-rules/parse
 POST /api/sandbox/test
@@ -428,7 +429,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.10.0",
+    "version": "0.11.0",
     "uptime": 12.34
   }
 }

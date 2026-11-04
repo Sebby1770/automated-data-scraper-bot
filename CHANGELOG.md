@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.11.0] - 2026-11-04
+
+### Added
+
+- Read-only source preview via `POST /api/preview` and a dashboard Preview button. One configured source is fetched with the same runtime options as a scrape, capped at 20 items, without notifications, text snapshots, price history, or scrape metrics.
+- Cron next-run hint under the dashboard schedule for `*/N * * * *`, `M * * * *`, and `M H * * *`. Other expressions stay unestimated.
+- Alert rows render each `changes` entry as a before → after pair in addition to the message.
+
+### Changed
+
+- Bumped package version to `0.11.0`.
+
 ## [0.10.0] - 2026-11-04
 
 ### Added

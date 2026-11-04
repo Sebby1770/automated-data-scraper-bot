@@ -9,6 +9,7 @@ import {
   Database,
   Download,
   ExternalLink,
+  Eye,
   FileText,
   Globe,
   FlaskConical,
@@ -28,6 +29,7 @@ import {
   X
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { nextCronRun } from "../cron-next.js";
 
 type SourceType = "html" | "rss" | "stooq" | "json" | "csv" | "sitemap";
 type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook" | "imessage";
@@ -120,6 +122,12 @@ interface PriceTrend {
   direction?: "up" | "down" | "flat";
 }
 
+interface AlertChange {
+  field: string;
+  previous: string;
+  current: string;
+}
+
 interface AlertItem {
   id: string;
   ruleName: string;
@@ -130,6 +138,21 @@ interface AlertItem {
   matchedAt: string;
   anomaly?: AlertAnomaly;
   priceHistory?: PriceTrend;
+  changes?: AlertChange[];
+}
+
+interface PreviewItem {
+  id: string;
+  title: string;
+  url: string;
+  fields: Record<string, string>;
+}
+
+interface SourcePreview {
+  sourceId: string;
+  sourceLabel: string;
+  total: number;
+  items: PreviewItem[];
 }
 
 interface SourceHealth {
@@ -257,6 +280,8 @@ export function App() {
   const [configPath, setConfigPath] = useState(() => window.localStorage.getItem(CONFIG_PROFILE_KEY) ?? "");
   const [configProfiles, setConfigProfiles] = useState<ConfigProfile[]>([]);
   const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem(DARK_MODE_KEY) === "true");
+  const [previewingId, setPreviewingId] = useState<string | null>(null);
+  const [sourcePreview, setSourcePreview] = useState<SourcePreview | null>(null);
 
   const readyNotifiers = useMemo(() => config?.notifiers.filter((notifier) => notifier.ready).length ?? 0, [config]);
   const lastRunMs = useMemo(() => {
@@ -266,6 +291,13 @@ export function App() {
 
     return new Date(runResult.summary.finishedAt).getTime() - new Date(runResult.summary.startedAt).getTime();
   }, [runResult]);
+
+  const cronHint = useMemo(() => {
+    if (!config?.cronSchedule) {
+      return null;
+    }
+    return describeNextCronRun(config.cronSchedule);
+  }, [config?.cronSchedule, config?.loadedAt]);
 
   const filteredRules = useMemo(() => {
     const rules = config?.rules ?? [];
@@ -310,6 +342,7 @@ export function App() {
   async function refreshConfig(path = configPath) {
     setStatus("loading");
     setError(null);
+    setSourcePreview(null);
 
     try {
       const query = path ? `?configPath=${encodeURIComponent(path)}` : "";
@@ -368,6 +401,33 @@ export function App() {
       setStatus("idle");
     }
   }, [configPath, dryRun, secret]);
+
+  async function previewSource(sourceId: string) {
+    setPreviewingId(sourceId);
+    setError(null);
+    window.localStorage.setItem("dashboardSecret", secret);
+
+    try {
+      const response = await fetch("/api/preview", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(secret ? { "x-dashboard-secret": secret } : {})
+        },
+        body: JSON.stringify({ sourceId, configPath: configPath || undefined })
+      });
+      const payload = (await response.json()) as ApiResponse<SourcePreview>;
+      if (!payload.ok || !payload.data) {
+        throw new Error(payload.error ?? "Source preview failed");
+      }
+      setSourcePreview(payload.data);
+    } catch (caught) {
+      setSourcePreview(null);
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setPreviewingId(null);
+    }
+  }
 
   async function validateConfig() {
     setValidating(true);
@@ -662,9 +722,15 @@ export function App() {
             <div>
               <h2>Sources</h2>
               <p>{config?.cronSchedule ? `Cron ${config.cronSchedule}` : "Local scheduler ready"}</p>
+              {cronHint ? <p className="cron-next">{cronHint}</p> : null}
             </div>
           </div>
-          <SourceTable sources={config?.sources ?? []} />
+          <SourceTable
+            sources={config?.sources ?? []}
+            previewingId={previewingId}
+            onPreview={(sourceId) => void previewSource(sourceId)}
+          />
+          {sourcePreview ? <SourcePreviewPanel preview={sourcePreview} onClose={() => setSourcePreview(null)} /> : null}
         </div>
 
         <div className="panel">
@@ -804,7 +870,15 @@ function Metric(props: {
   );
 }
 
-function SourceTable({ sources }: { sources: DashboardSource[] }) {
+function SourceTable({
+  sources,
+  previewingId,
+  onPreview
+}: {
+  sources: DashboardSource[];
+  previewingId: string | null;
+  onPreview: (sourceId: string) => void;
+}) {
   if (sources.length === 0) {
     return <EmptyState label="No sources loaded" />;
   }
@@ -817,11 +891,13 @@ function SourceTable({ sources }: { sources: DashboardSource[] }) {
             <th>Source</th>
             <th>Target</th>
             <th>Detail</th>
+            <th className="source-actions">Preview</th>
           </tr>
         </thead>
         <tbody>
           {sources.map((source) => {
             const Icon = sourceIcons[source.type];
+            const previewing = previewingId === source.id;
             return (
               <tr key={source.id}>
                 <td>
@@ -837,12 +913,73 @@ function SourceTable({ sources }: { sources: DashboardSource[] }) {
                   <span className="target-text">{source.target}</span>
                 </td>
                 <td>{source.fieldCount ? `${source.fieldCount} fields · ${source.detail}` : source.detail}</td>
+                <td className="source-actions">
+                  <button
+                    className="test-button source-preview-button"
+                    type="button"
+                    aria-label={`Preview ${source.label}`}
+                    disabled={previewingId !== null}
+                    onClick={() => onPreview(source.id)}
+                  >
+                    {previewing ? <Loader2 className="spin" size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />}
+                    Preview
+                  </button>
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function SourcePreviewPanel({ preview, onClose }: { preview: SourcePreview; onClose: () => void }) {
+  return (
+    <section className="source-preview" aria-label="Source preview">
+      <div className="source-preview-header">
+        <div>
+          <span className="source-preview-kicker">Preview</span>
+          <h3>{preview.sourceLabel}</h3>
+          <p>
+            {preview.items.length} of {preview.total} items
+            {preview.total > preview.items.length ? " · first 20 only" : ""}
+          </p>
+        </div>
+        <button className="icon-button" type="button" aria-label="Close preview" onClick={onClose}>
+          <X size={18} aria-hidden="true" />
+        </button>
+      </div>
+      {preview.items.length === 0 ? (
+        <EmptyState label="This source returned no items" />
+      ) : (
+        <ul className="source-preview-list">
+          {preview.items.map((item) => {
+            const fields = previewFields(item.fields);
+            return (
+              <li className="source-preview-item" key={item.id}>
+                <strong>{item.title}</strong>
+                {item.url ? (
+                  <a href={item.url} target="_blank" rel="noreferrer">
+                    {item.url}
+                  </a>
+                ) : null}
+                {fields.length > 0 ? (
+                  <dl className="source-preview-fields">
+                    {fields.map(([key, value]) => (
+                      <div key={key}>
+                        <dt>{key}</dt>
+                        <dd>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -1392,6 +1529,20 @@ function GroupedAlerts({ alerts }: { alerts: AlertItem[] }) {
                       </div>
                       <strong>{alert.title}</strong>
                       <p>{alert.message}</p>
+                      {alert.changes && alert.changes.length > 0 ? (
+                        <ul className="alert-changes">
+                          {alert.changes.map((change, index) => (
+                            <li key={`${alert.id}-${change.field}-${index}`}>
+                              <span className="change-field">{change.field}</span>
+                              <span className="change-before">{change.previous}</span>
+                              <span className="change-arrow" aria-hidden="true">
+                                →
+                              </span>
+                              <span className="change-after">{change.current}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                       {alert.anomaly ? <small className="anomaly-copy">{alert.anomaly.explanation}</small> : null}
                       {alert.priceHistory && alert.priceHistory.history.length >= 2 ? (
                         <PriceSparkline trend={alert.priceHistory} />
@@ -1459,6 +1610,27 @@ function createHistoryEntry(result: RunResult): RunHistoryEntry {
     alertCount: result.summary.alertCount,
     errorCount: result.summary.errors.length
   };
+}
+
+function describeNextCronRun(expression: string): string {
+  const next = nextCronRun(expression);
+  if (!next) {
+    return "Next run not estimated for this expression";
+  }
+
+  const formatted = new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(next);
+  return `Next run ${formatted}`;
+}
+
+function previewFields(fields: Record<string, string>): Array<[string, string]> {
+  const entries = Object.entries(fields);
+  const preferred = entries.filter(([key]) => key !== "title" && key !== "url");
+  return (preferred.length > 0 ? preferred : entries).slice(0, 3);
 }
 
 function formatTimestamp(value: string): string {
