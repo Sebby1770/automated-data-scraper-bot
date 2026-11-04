@@ -112,13 +112,34 @@ export function isDashboardAuthorized(providedSecret?: string): boolean {
 
 function summarizeSource(source: SourceConfig): DashboardSource {
   if (source.type === "html") {
+    const pages = source.pagination?.maxPages;
     return {
       id: source.id,
       type: source.type,
       label: source.label ?? source.id,
       target: source.url,
-      detail: source.itemSelector,
+      detail: pages ? `${source.itemSelector} · ${pages} pages` : source.itemSelector,
       fieldCount: Object.keys(source.fields).length
+    };
+  }
+
+  if (source.type === "csv") {
+    return {
+      id: source.id,
+      type: source.type,
+      label: source.label ?? source.id,
+      target: source.url,
+      detail: "CSV rows"
+    };
+  }
+
+  if (source.type === "sitemap") {
+    return {
+      id: source.id,
+      type: source.type,
+      label: source.label ?? source.id,
+      target: source.url,
+      detail: `sitemap · ${source.maxUrls ?? 40} urls`
     };
   }
 

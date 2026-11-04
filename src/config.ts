@@ -31,7 +31,8 @@ const conditionSchema = z.object({
     "decreased",
     "between",
     "starts_with",
-    "ends_with"
+    "ends_with",
+    "changed"
   ]),
   value: z.unknown().optional()
 });
@@ -47,14 +48,24 @@ const settingsSchema = z
     priceHistoryFields: z.array(z.string().min(1)).default(["price"]),
     anomalyThresholdPercent: z.number().positive().default(20),
     quietHours: quietHoursSchema,
-    alertCooldownMinutes: z.number().int().nonnegative().optional()
+    alertCooldownMinutes: z.number().int().nonnegative().optional(),
+    respectRobotsTxt: z.boolean().default(false),
+    minHostIntervalMs: z.number().int().nonnegative().default(0),
+    conditionalRequests: z.boolean().default(false)
   })
   .default({});
 
 const htmlFieldSchema = z.object({
   selector: z.string().min(1),
   attr: z.string().optional(),
-  transform: z.enum(["text", "number", "price", "percentage", "absolute_url", "lower", "upper"]).optional()
+  transform: z.enum(["text", "number", "price", "percentage", "absolute_url", "lower", "upper", "regex"]).optional(),
+  pattern: z.string().min(1).optional(),
+  group: z.number().int().nonnegative().optional()
+});
+
+const paginationSchema = z.object({
+  nextSelector: z.string().min(1),
+  maxPages: z.number().int().min(1).max(10).default(3)
 });
 
 const sourceSchema = z.discriminatedUnion("type", [
@@ -66,7 +77,8 @@ const sourceSchema = z.discriminatedUnion("type", [
     itemSelector: z.string().min(1),
     baseUrl: z.string().url().optional(),
     idFields: z.array(z.string().min(1)).optional(),
-    fields: z.record(htmlFieldSchema)
+    fields: z.record(htmlFieldSchema),
+    pagination: paginationSchema.optional()
   }),
   z.object({
     id: z.string().min(1),
@@ -88,6 +100,23 @@ const sourceSchema = z.discriminatedUnion("type", [
     itemsPath: z.string().optional(),
     idFields: z.array(z.string().min(1)).optional(),
     fields: z.record(z.string().min(1))
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("csv"),
+    label: z.string().optional(),
+    url: z.string().url(),
+    idFields: z.array(z.string().min(1)).optional()
+  }),
+  z.object({
+    id: z.string().min(1),
+    type: z.literal("sitemap"),
+    label: z.string().optional(),
+    url: z.string().url(),
+    include: z.string().min(1).optional(),
+    exclude: z.string().min(1).optional(),
+    maxUrls: z.number().int().min(1).max(200).default(40),
+    maxSitemaps: z.number().int().min(1).max(8).default(3)
   })
 ]);
 
@@ -288,6 +317,20 @@ function collectConfigIssues(config: BotConfig, issues: ConfigValidationIssue[])
     const conditionCount = (rule.all?.length ?? 0) + (rule.any?.length ?? 0);
     if (conditionCount === 0) {
       issues.push({ level: "warning", message: `Rule "${rule.name}" has no all/any conditions` });
+    }
+  }
+
+  for (const source of config.sources) {
+    if (source.type !== "html") {
+      continue;
+    }
+    for (const [field, spec] of Object.entries(source.fields)) {
+      if (spec.transform === "regex" && !spec.pattern) {
+        issues.push({
+          level: "error",
+          message: `Source "${source.id}" field "${field}" uses the regex transform without a pattern`
+        });
+      }
     }
   }
 

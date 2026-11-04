@@ -1,0 +1,32 @@
+# Watch a public sitemap and alert when a matching URL is new or its lastmod changes.
+
+settings:
+  runIntervalSeconds: 3600
+  userAgent: "AutomatedDataScraperBot/0.10 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  requestTimeoutMs: 12000
+  maxConcurrency: 1
+  stateTtlDays: 14
+  respectRobotsTxt: true
+  minHostIntervalMs: 1000
+
+notifiers:
+  - type: console
+    enabled: true
+
+sources:
+  - id: docs
+    type: sitemap
+    label: "Public docs"
+    url: "https://developer.mozilla.org/sitemap.xml"
+    include: "/docs/"
+    maxUrls: 25
+    maxSitemaps: 2
+
+rules:
+  - name: doc page changed
+    source: docs
+    all:
+      - field: lastmod
+        operator: changed
+    message: "{title} was updated"
+    severity: info

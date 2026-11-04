@@ -2,6 +2,42 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.10.0] - 2026-11-04
+
+### Added
+
+- Sitemap sources (`type: sitemap`). A urlset becomes one item per page, with `loc`, `lastmod`, and a title taken from the path. A sitemap index fetches up to 8 child sitemaps. `include` and `exclude` are regular expressions, and `maxUrls` caps the list at 200. Locations that are not `http` or `https` are dropped.
+- Profile `configs/sitemap-watch.yml`.
+
+### Changed
+
+- Bumped package version to `0.10.0`.
+
+## [0.9.0] - 2026-11-04
+
+### Added
+
+- `changed` alerts now include the previous text and the new text, both in the message (`title: "Mug" → "Cup"`) and on `alert.changes`.
+
+### Changed
+
+- Bumped package version to `0.9.0`.
+
+## [0.8.0] - 2026-11-04
+
+### Added
+
+- HTML pagination via `pagination.nextSelector` and `pagination.maxPages` (capped at 10), plus a `regex` field transform with an optional capture `group`.
+- CSV sources (`type: csv`) that map header rows to items and coerce numeric cells.
+- `changed` rule operator and natural-language phrase (`alert when title changes`). The first observation is the baseline; later runs alert when that field's text differs. Snapshots persist in `data/text-snapshots.json`.
+- Polite fetching: `settings.respectRobotsTxt`, `settings.minHostIntervalMs`, and `settings.conditionalRequests` (`If-None-Match` / 304). A missing robots.txt is treated as allowed. Crawl-delay is honored up to 5 seconds.
+- Profile `configs/changes-watch.yml`.
+- Dashboard chips for robots.txt and conditional GET, a CSV source icon, and the `changed` operator in the rule builder.
+
+### Changed
+
+- Bumped package version to `0.8.0`.
+
 ## [0.7.0] - 2026-09-02
 
 ### Added

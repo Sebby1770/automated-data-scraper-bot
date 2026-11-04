@@ -67,6 +67,10 @@ const OPERATOR_PHRASES: OperatorPhrase[] = [
     patterns: [/\bexists?\b/i, /\bis\s+present\b/i, /\bis\s+set\b/i, /\bhas\s+a\s+value\b/i]
   },
   {
+    operator: "changed",
+    patterns: [/\bchang(?:e|es|ed)(?!\s+by\b)(?!\s+percent\b)/i]
+  },
+  {
     operator: "between",
     patterns: [/\bbetween\b/i, /\bin\s+range\b/i]
   },
@@ -118,7 +122,7 @@ export function parseNlRule(text: string): NlParseOutcome {
   }
 
   const value = extractValue(normalized, operatorMatch, field);
-  if (operatorMatch.operator !== "exists" && value === undefined) {
+  if (operatorMatch.operator !== "exists" && operatorMatch.operator !== "changed" && value === undefined) {
     return {
       ok: false,
       error: `Detected "${operatorMatch.operator}" on "${field}" but could not parse a comparison value.`

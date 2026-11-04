@@ -9,6 +9,8 @@ import {
   Database,
   Download,
   ExternalLink,
+  FileText,
+  Globe,
   FlaskConical,
   History,
   Loader2,
@@ -27,7 +29,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-type SourceType = "html" | "rss" | "stooq" | "json";
+type SourceType = "html" | "rss" | "stooq" | "json" | "csv" | "sitemap";
 type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook" | "imessage";
 type TestableNotifierType = "discord" | "telegram" | "slack" | "webhook" | "imessage";
 type RuleOperator =
@@ -44,7 +46,8 @@ type RuleOperator =
   | "changed_by"
   | "changed_pct"
   | "increased"
-  | "decreased";
+  | "decreased"
+  | "changed";
 
 interface DashboardSource {
   id: string;
@@ -92,6 +95,9 @@ interface DashboardConfig {
       timezone?: string;
     };
     quietHoursActive: boolean;
+    respectRobotsTxt?: boolean;
+    conditionalRequests?: boolean;
+    minHostIntervalMs?: number;
   };
   sources: DashboardSource[];
   rules: DashboardRule[];
@@ -187,14 +193,18 @@ const sourceIcons: Record<SourceType, typeof ShoppingBag> = {
   html: ShoppingBag,
   rss: Rss,
   stooq: TrendingUp,
-  json: Braces
+  json: Braces,
+  csv: FileText,
+  sitemap: Globe
 };
 
 const sourceTone: Record<SourceType, string> = {
   html: "tone-teal",
   rss: "tone-amber",
   stooq: "tone-blue",
-  json: "tone-violet"
+  json: "tone-violet",
+  csv: "tone-teal",
+  sitemap: "tone-blue"
 };
 
 const ruleOperators: RuleOperator[] = [
@@ -211,7 +221,8 @@ const ruleOperators: RuleOperator[] = [
   "changed_by",
   "changed_pct",
   "increased",
-  "decreased"
+  "decreased",
+  "changed"
 ];
 
 export function App() {
@@ -521,6 +532,18 @@ export function App() {
                 ))}
               </select>
             </label>
+          ) : null}
+
+          {config?.settings.respectRobotsTxt ? (
+            <span className="quiet-hours-indicator" title="Sources skip URLs disallowed by robots.txt">
+              Robots.txt
+            </span>
+          ) : null}
+
+          {config?.settings.conditionalRequests ? (
+            <span className="quiet-hours-indicator" title="Repeat fetches send If-None-Match">
+              Conditional GET
+            </span>
           ) : null}
 
           {config?.settings.quietHoursActive ? (

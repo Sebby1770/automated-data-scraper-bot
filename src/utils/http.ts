@@ -50,6 +50,43 @@ export async function fetchWithRetry(
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 }
 
+const conditionalCache = new Map<string, { etag?: string; body: string }>();
+
+export function resetConditionalCacheForTests(): void {
+  conditionalCache.clear();
+}
+
+export async function fetchTextConditional(
+  url: string,
+  userAgent: string,
+  timeoutMs: number
+): Promise<{ body: string; notModified: boolean }> {
+  const cached = conditionalCache.get(url);
+  const headers: Record<string, string> = {
+    "user-agent": userAgent,
+    accept: "text/html,application/xhtml+xml,application/xml,text/xml,text/csv,application/json;q=0.9,*/*;q=0.8"
+  };
+  if (cached?.etag) {
+    headers["if-none-match"] = cached.etag;
+  }
+
+  const response = await fetchWithRetry(url, { timeoutMs, headers });
+  if (response.status === 304 && cached) {
+    return { body: cached.body, notModified: true };
+  }
+
+  if (!response.ok) {
+    throw new Error(`GET ${url} failed with ${response.status} ${response.statusText}`);
+  }
+
+  const body = await response.text();
+  const etag = response.headers.get("etag") ?? undefined;
+  if (etag) {
+    conditionalCache.set(url, { etag, body });
+  }
+  return { body, notModified: false };
+}
+
 export async function fetchText(url: string, userAgent: string, timeoutMs: number): Promise<string> {
   const response = await fetchWithRetry(url, {
     timeoutMs,

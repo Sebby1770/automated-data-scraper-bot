@@ -1,7 +1,7 @@
 import type { DataItem, DataRecord, JsonSourceConfig } from "../types.js";
 import { stableHash } from "../utils/hash.js";
-import { fetchJson } from "../utils/http.js";
 import { compactText, getPath, toNumber } from "../utils/object.js";
+import { fetchSourceText } from "./fetch.js";
 import type { SourceAdapter, SourceRuntimeOptions } from "./types.js";
 
 export class JsonSourceAdapter implements SourceAdapter {
@@ -12,7 +12,7 @@ export class JsonSourceAdapter implements SourceAdapter {
   }
 
   async fetchItems(): Promise<DataItem[]> {
-    const payload = await fetchJson(this.config.url, this.options.userAgent, this.options.requestTimeoutMs);
+    const payload = JSON.parse(await fetchSourceText(this.config.url, this.options)) as unknown;
     const rawItems = resolveItems(payload, this.config.itemsPath);
     const observedAt = new Date().toISOString();
 

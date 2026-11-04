@@ -1,8 +1,8 @@
 import { XMLParser } from "fast-xml-parser";
 import type { DataItem, RssSourceConfig } from "../types.js";
 import { stableHash } from "../utils/hash.js";
-import { fetchText } from "../utils/http.js";
 import { compactText } from "../utils/object.js";
+import { fetchSourceText } from "./fetch.js";
 import type { SourceAdapter, SourceRuntimeOptions } from "./types.js";
 
 interface RssEntry {
@@ -22,7 +22,7 @@ export class RssSourceAdapter implements SourceAdapter {
   }
 
   async fetchItems(): Promise<DataItem[]> {
-    const xml = await fetchText(this.config.url, this.options.userAgent, this.options.requestTimeoutMs);
+    const xml = await fetchSourceText(this.config.url, this.options);
     const parser = new XMLParser({
       ignoreAttributes: false,
       trimValues: true

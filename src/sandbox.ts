@@ -109,7 +109,7 @@ function extractHtmlFields(sample: string, source?: SourceConfig): Record<string
       }
 
       const raw = config.attr ? node.attr(config.attr) : node.text();
-      fields[name] = applyHtmlTransform(raw ?? "", config.transform, source.baseUrl);
+      fields[name] = applyHtmlTransform(raw ?? "", config, source.baseUrl);
     }
     return fields;
   }
@@ -132,10 +132,11 @@ function extractHtmlFields(sample: string, source?: SourceConfig): Record<string
 
 function applyHtmlTransform(
   value: string,
-  transform: "text" | "number" | "price" | "percentage" | "absolute_url" | "lower" | "upper" | undefined,
+  field: { transform?: string; pattern?: string; group?: number },
   baseUrl?: string
 ): unknown {
   const trimmed = value.trim();
+  const transform = field.transform;
   switch (transform) {
     case "lower":
       return trimmed.toLowerCase();
@@ -154,6 +155,16 @@ function applyHtmlTransform(
       } catch {
         return trimmed;
       }
+    case "regex": {
+      if (!field.pattern) {
+        return trimmed;
+      }
+      try {
+        return trimmed.match(new RegExp(field.pattern, "i"))?.[field.group ?? 0] ?? "";
+      } catch {
+        return trimmed;
+      }
+    }
     default:
       return trimmed;
   }

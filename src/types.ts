@@ -1,6 +1,6 @@
 export type DataRecord = Record<string, unknown>;
 
-export type SourceKind = "html" | "rss" | "stooq" | "json";
+export type SourceKind = "html" | "rss" | "stooq" | "json" | "csv" | "sitemap";
 
 export interface QuietHoursSettings {
   start: string;
@@ -19,6 +19,9 @@ export interface BotSettings {
   anomalyThresholdPercent?: number;
   quietHours?: QuietHoursSettings;
   alertCooldownMinutes?: number;
+  respectRobotsTxt?: boolean;
+  minHostIntervalMs?: number;
+  conditionalRequests?: boolean;
 }
 
 export interface BaseSourceConfig {
@@ -30,7 +33,14 @@ export interface BaseSourceConfig {
 export interface HtmlFieldConfig {
   selector: string;
   attr?: string;
-  transform?: "text" | "number" | "price" | "percentage" | "absolute_url" | "lower" | "upper";
+  transform?: "text" | "number" | "price" | "percentage" | "absolute_url" | "lower" | "upper" | "regex";
+  pattern?: string;
+  group?: number;
+}
+
+export interface HtmlPaginationConfig {
+  nextSelector: string;
+  maxPages?: number;
 }
 
 export interface HtmlSourceConfig extends BaseSourceConfig {
@@ -40,6 +50,7 @@ export interface HtmlSourceConfig extends BaseSourceConfig {
   baseUrl?: string;
   idFields?: string[];
   fields: Record<string, HtmlFieldConfig>;
+  pagination?: HtmlPaginationConfig;
 }
 
 export interface RssSourceConfig extends BaseSourceConfig {
@@ -52,6 +63,21 @@ export interface StooqSourceConfig extends BaseSourceConfig {
   symbol: string;
 }
 
+export interface CsvSourceConfig extends BaseSourceConfig {
+  type: "csv";
+  url: string;
+  idFields?: string[];
+}
+
+export interface SitemapSourceConfig extends BaseSourceConfig {
+  type: "sitemap";
+  url: string;
+  include?: string;
+  exclude?: string;
+  maxUrls?: number;
+  maxSitemaps?: number;
+}
+
 export interface JsonSourceConfig extends BaseSourceConfig {
   type: "json";
   url: string;
@@ -60,7 +86,7 @@ export interface JsonSourceConfig extends BaseSourceConfig {
   fields: Record<string, string>;
 }
 
-export type SourceConfig = HtmlSourceConfig | RssSourceConfig | StooqSourceConfig | JsonSourceConfig;
+export type SourceConfig = HtmlSourceConfig | RssSourceConfig | StooqSourceConfig | JsonSourceConfig | CsvSourceConfig | SitemapSourceConfig;
 
 export type RuleOperator =
   | "<"
@@ -79,7 +105,8 @@ export type RuleOperator =
   | "decreased"
   | "between"
   | "starts_with"
-  | "ends_with";
+  | "ends_with"
+  | "changed";
 
 export type AlertSeverity = "info" | "warning" | "critical";
 
@@ -180,6 +207,7 @@ export interface Alert {
   severity?: AlertSeverity;
   anomaly?: AlertAnomaly;
   priceHistory?: PriceTrend;
+  changes?: Array<{ field: string; previous: string; current: string }>;
 }
 
 export interface SourceHealth {

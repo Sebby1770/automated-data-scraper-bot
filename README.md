@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 [![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.7.0-teal)
+![Version](https://img.shields.io/badge/version-0.10.0-teal)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
 Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, Slack, webhooks, or the macOS Messages app when a rule matches.
@@ -33,6 +33,11 @@ It can run as a web app, a local long-lived process, a Docker container, a prote
 - Retries HTTP requests with exponential backoff.
 - Supports persistent local state or Upstash Redis REST state for serverless deployments.
 - Exposes MCP tools for programmatic control from AI assistants.
+- Follows HTML pagination (`pagination.nextSelector`, up to 10 pages) and extracts regex capture groups from fields.
+- Reads CSV endpoints as row items, with numeric columns parsed automatically.
+- Reads public XML sitemaps (`type: sitemap`), including a bounded number of child sitemaps, and keeps only `http` and `https` page URLs.
+- Alerts when a text field changes from the previous observation (`operator: changed`). The alert includes the previous text and the new text.
+- Can respect `robots.txt`, wait between requests to the same host, and send `If-None-Match` so unchanged pages return 304.
 
 ## Quick Start
 
@@ -287,6 +292,7 @@ Set a default profile with `CONFIG_PATH` or switch profiles from the dashboard d
 
 - `configs/stocks-watch.yml` — stock quote and price-change rules
 - `configs/retail-watch.yml` — retail demo with budget and increase rules
+- `configs/changes-watch.yml` — paginated catalog with robots.txt, conditional GET, and a title-change rule
 
 ## Comparison Rules
 
@@ -422,7 +428,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.7.0",
+    "version": "0.10.0",
     "uptime": 12.34
   }
 }

@@ -1,0 +1,56 @@
+# Page through a public catalog, respect robots.txt, and alert when a title changes.
+
+settings:
+  runIntervalSeconds: 900
+  userAgent: "AutomatedDataScraperBot/0.8 (+https://github.com/Sebby1770/automated-data-scraper-bot)"
+  requestTimeoutMs: 12000
+  maxConcurrency: 1
+  stateTtlDays: 14
+  respectRobotsTxt: true
+  minHostIntervalMs: 1000
+  conditionalRequests: true
+  priceHistoryFields: ["price"]
+
+notifiers:
+  - type: console
+    enabled: true
+
+sources:
+  - id: travel-books
+    type: html
+    label: "Travel books"
+    url: "https://books.toscrape.com/catalogue/category/books/travel_2/index.html"
+    itemSelector: "article.product_pod"
+    baseUrl: "https://books.toscrape.com/catalogue/category/books/travel_2/"
+    idFields: ["title", "url"]
+    pagination:
+      nextSelector: "li.next a"
+      maxPages: 2
+    fields:
+      title:
+        selector: "h3 a"
+        attr: "title"
+      url:
+        selector: "h3 a"
+        attr: "href"
+        transform: absolute_url
+      price:
+        selector: ".price_color"
+        transform: price
+
+rules:
+  - name: Title changed
+    source: travel-books
+    all:
+      - field: title
+        operator: changed
+    message: "{title} changed"
+    severity: info
+  - name: Budget travel book
+    source: travel-books
+    all:
+      - field: price
+        operator: "<"
+        value: 40
+    message: "{title} is {price}"
+    severity: warning

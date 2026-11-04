@@ -5,6 +5,7 @@ import { getPath, toNumber } from "./utils/object.js";
 
 export interface RuleEvaluationContext {
   getHistory?: (sourceId: string, itemId: string, field: string) => PriceSnapshot[];
+  getPreviousText?: (sourceId: string, itemId: string, field: string) => string | undefined;
 }
 
 export interface RuleMatch {
@@ -12,14 +13,47 @@ export interface RuleMatch {
   alert: Alert;
 }
 
+export function collectChangedFields(rules: RuleConfig[]): string[] {
+  const fields = new Set<string>();
+  for (const rule of rules) {
+    for (const condition of [...(rule.all ?? []), ...(rule.any ?? [])]) {
+      if (condition.operator === "changed") {
+        fields.add(condition.field);
+      }
+    }
+  }
+  return [...fields];
+}
+
 export function evaluateRules(item: DataItem, rules: RuleConfig[], context?: RuleEvaluationContext): RuleMatch[] {
   return rules
     .filter((rule) => rule.source === item.sourceId)
     .filter((rule) => evaluateRule(item, rule, context))
-    .map((rule) => ({
-      rule,
-      alert: createAlert(item, rule)
-    }));
+    .map((rule) => {
+      const alert = createAlert(item, rule);
+      const changes = textChanges(item, rule, context);
+      if (changes.length > 0) {
+        const detail = changes.map((change) => `${change.field}: "${change.previous}" → "${change.current}"`).join("; ");
+        alert.message = `${alert.message} (${detail})`;
+        alert.changes = changes;
+      }
+      return { rule, alert };
+    });
+}
+
+export function textChanges(item: DataItem, rule: RuleConfig, context?: RuleEvaluationContext) {
+  const changes: Array<{ field: string; previous: string; current: string }> = [];
+  for (const condition of [...(rule.all ?? []), ...(rule.any ?? [])]) {
+    if (condition.operator !== "changed") {
+      continue;
+    }
+    const previous = context?.getPreviousText?.(item.sourceId, item.id, condition.field);
+    const current = String(readField(item, condition.field) ?? "");
+    if (previous !== undefined && previous !== current) {
+      changes.push({ field: condition.field, previous, current });
+    }
+  }
+  return changes;
 }
 
 export function evaluateRule(item: DataItem, rule: RuleConfig, context?: RuleEvaluationContext): boolean {
@@ -77,6 +111,13 @@ export function evaluateCondition(item: DataItem, condition: RuleCondition, cont
         threshold !== undefined &&
         compareToHistory(item, condition.field, context, (current, previous) => Math.abs(current - previous) >= threshold)
       );
+    }
+    case "changed": {
+      const previous = context?.getPreviousText?.(item.sourceId, item.id, condition.field);
+      if (previous === undefined) {
+        return false;
+      }
+      return previous !== String(candidate ?? "");
     }
     case "changed_pct": {
       const threshold = toNumber(condition.value);

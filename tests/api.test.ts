@@ -7,7 +7,7 @@ describe("api", () => {
 
     expect(response.ok).toBe(true);
     expect(response.data?.version).toBe(APP_VERSION);
-    expect(response.data?.version).toBe("0.7.0");
+    expect(response.data?.version).toBe("0.10.0");
     expect(response.data?.uptime).toBeGreaterThanOrEqual(0);
   });
 

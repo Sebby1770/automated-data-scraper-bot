@@ -1,8 +1,8 @@
 import { parse } from "csv-parse/sync";
 import type { DataItem, StooqSourceConfig } from "../types.js";
 import { stableHash } from "../utils/hash.js";
-import { fetchText } from "../utils/http.js";
 import { toNumber } from "../utils/object.js";
+import { fetchSourceText } from "./fetch.js";
 import type { SourceAdapter, SourceRuntimeOptions } from "./types.js";
 
 interface StooqRow {
@@ -27,7 +27,7 @@ export class StooqSourceAdapter implements SourceAdapter {
   async fetchItems(): Promise<DataItem[]> {
     const symbol = this.config.symbol.toLowerCase();
     const url = `https://stooq.com/q/l/?s=${encodeURIComponent(symbol)}&f=sd2t2ohlcvn&h&e=csv`;
-    const csv = await fetchText(url, this.options.userAgent, this.options.requestTimeoutMs);
+    const csv = await fetchSourceText(url, this.options);
     const rows = parse(csv, {
       columns: true,
       skip_empty_lines: true

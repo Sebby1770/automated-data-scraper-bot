@@ -6,7 +6,7 @@ import { createNotifiers } from "./notifiers/index.js";
 import type { Notifier } from "./notifiers/types.js";
 import { isQuietHours } from "./quiet-hours.js";
 import { resolveCooldownMinutes, shouldSkipDuplicate } from "./cooldown.js";
-import { evaluateRules } from "./rules.js";
+import { collectChangedFields, evaluateRules } from "./rules.js";
 import { createSourceAdapter } from "./sources/index.js";
 import { createStateStore, type StateStore } from "./state/index.js";
 import {
@@ -14,12 +14,14 @@ import {
   type PriceHistoryStore,
   type PriceSnapshot
 } from "./state/price-history.js";
+import { createFileTextSnapshotStore, createMemoryTextSnapshotStore, type TextSnapshotStore } from "./state/text-snapshots.js";
 
 export interface RunOptions {
   dryRun?: boolean;
   includeAlerts?: boolean;
   stateStore?: StateStore;
   priceHistoryStore?: PriceHistoryStore;
+  textSnapshotStore?: TextSnapshotStore;
   notifiers?: Notifier[];
 }
 
@@ -31,10 +33,17 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
   const state = options.stateStore ?? createStateStore(config.settings.stateTtlDays);
   const priceHistory = options.priceHistoryStore ?? createPriceHistoryStore();
   const notifiers = options.notifiers ?? (dryRun || suppressNotifications ? [] : createNotifiers(config.notifiers));
+  const changedFields = collectChangedFields(config.rules);
+  const textSnapshots =
+    options.textSnapshotStore ??
+    (changedFields.length > 0 ? createFileTextSnapshotStore() : createMemoryTextSnapshotStore());
   const adapters = config.sources.map((source) =>
     createSourceAdapter(source, {
       userAgent: config.settings.userAgent,
-      requestTimeoutMs: config.settings.requestTimeoutMs
+      requestTimeoutMs: config.settings.requestTimeoutMs,
+      respectRobotsTxt: config.settings.respectRobotsTxt,
+      minHostIntervalMs: config.settings.minHostIntervalMs,
+      conditionalRequests: config.settings.conditionalRequests
     })
   );
   const errors: string[] = [];
@@ -74,7 +83,8 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
   const items = sourceResults.flat();
   const priceHistoryUpdates = await priceHistory.recordItems(items, trackedFields, startedAt);
   const ruleContext = {
-    getHistory: (sourceId: string, itemId: string, field: string) => priceHistory.getHistory(sourceId, itemId, field)
+    getHistory: (sourceId: string, itemId: string, field: string) => priceHistory.getHistory(sourceId, itemId, field),
+    getPreviousText: (sourceId: string, itemId: string, field: string) => textSnapshots.get(sourceId, itemId, field)
   };
   const matches = items.flatMap((item) => evaluateRules(item, config.rules, ruleContext));
   const alerts: Alert[] = [];
@@ -94,6 +104,8 @@ export async function runOnce(config: BotConfig, options: RunOptions = {}): Prom
       }
     }
   }
+
+  textSnapshots.record(items, changedFields);
 
   if (!dryRun && digestMode && alerts.length > 0 && !suppressNotifications) {
     const deliveredCount = await sendDigest(notifiers, alerts, errors);

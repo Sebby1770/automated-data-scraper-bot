@@ -1,6 +1,6 @@
 {
   "name": "automated-data-scraper-bot",
-  "version": "0.7.0",
+  "version": "0.10.0",
   "description": "Config-driven bot that watches retail, housing, stock, and JSON data sources and routes rule alerts to local or remote notification channels.",
   "type": "module",
   "private": false,
