@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { nextCronRun } from "../cron-next.js";
+import { diffRuns, diffSummary } from "../run-diff.js";
 
 type SourceType = "html" | "rss" | "stooq" | "json" | "csv" | "sitemap";
 type NotifierType = "console" | "discord" | "telegram" | "slack" | "webhook" | "imessage";
@@ -205,6 +206,7 @@ interface RunHistoryEntry {
   matchedCount: number;
   alertCount: number;
   errorCount: number;
+  alerts?: { id: string; title: string }[];
 }
 
 const RUN_HISTORY_KEY = "scraperRunHistory";
@@ -572,6 +574,7 @@ export function App() {
           <div>
             <h1>Scraper Bot Console</h1>
             <p>{config ? `${config.sources.length} sources · ${config.rules.length} rules` : "Loading bot config"}</p>
+            <a className="home-link" href="/">Overview</a>
           </div>
         </div>
 
@@ -1213,25 +1216,84 @@ function RuleBuilderModal({
 }
 
 function RunHistoryPanel({ history }: { history: RunHistoryEntry[] }) {
-  if (history.length === 0) {
-    return <EmptyState label="No runs recorded yet" />;
+  return (
+    <div className="history-list">
+      <SinceLastRun history={history} />
+      {history.length === 0 ? (
+        <EmptyState label="No runs recorded yet" />
+      ) : (
+        history.map((entry) => (
+          <div className="history-row" key={entry.id}>
+            <div>
+              <strong>{formatTimestamp(entry.finishedAt)}</strong>
+              <span>
+                {entry.dryRun ? "Dry run" : "Live"} · {formatDuration(entry.durationMs)} · {entry.alertCount} alerts
+              </span>
+            </div>
+            <span className={`history-pill ${entry.errorCount > 0 ? "warn" : "ok"}`}>
+              {entry.errorCount > 0 ? `${entry.errorCount} errors` : "Clean"}
+            </span>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+function SinceLastRun({ history }: { history: RunHistoryEntry[] }) {
+  const [copyNote, setCopyNote] = useState("");
+  const newerAlerts = history[0]?.alerts;
+  const olderAlerts = history[1]?.alerts;
+
+  if (!Array.isArray(newerAlerts) || !Array.isArray(olderAlerts)) {
+    return (
+      <div className="run-diff">
+        <h3>Since last run</h3>
+        <p>Run again to compare alerts.</p>
+      </div>
+    );
+  }
+
+  const diff = diffRuns(olderAlerts, newerAlerts);
+  const summary = diffSummary(diff);
+
+  async function copySummary() {
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopyNote("Copied.");
+    } catch {
+      setCopyNote("The sentence stays here. Copy it from the page.");
+    }
   }
 
   return (
-    <div className="history-list">
-      {history.map((entry) => (
-        <div className="history-row" key={entry.id}>
-          <div>
-            <strong>{formatTimestamp(entry.finishedAt)}</strong>
-            <span>
-              {entry.dryRun ? "Dry run" : "Live"} · {formatDuration(entry.durationMs)} · {entry.alertCount} alerts
-            </span>
-          </div>
-          <span className={`history-pill ${entry.errorCount > 0 ? "warn" : "ok"}`}>
-            {entry.errorCount > 0 ? `${entry.errorCount} errors` : "Clean"}
-          </span>
+    <div className="run-diff">
+      <h3>Since last run</h3>
+      <p className="run-diff-summary">{summary}</p>
+      <button className="secondary-button compact-button run-diff-copy" type="button" onClick={() => void copySummary()}>
+        Copy sentence
+      </button>
+      {copyNote ? <p className="run-diff-copy-note">{copyNote}</p> : null}
+      {diff.added.length > 0 ? (
+        <div>
+          <p>Added</p>
+          <ul className="run-diff-added">
+            {diff.added.map((alert) => (
+              <li key={alert.id}>{alert.title}</li>
+            ))}
+          </ul>
         </div>
-      ))}
+      ) : null}
+      {diff.removed.length > 0 ? (
+        <div>
+          <p>Removed</p>
+          <ul className="run-diff-removed">
+            {diff.removed.map((alert) => (
+              <li key={alert.id}>{alert.title}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1608,7 +1670,11 @@ function createHistoryEntry(result: RunResult): RunHistoryEntry {
     itemCount: result.summary.itemCount,
     matchedCount: result.summary.matchedCount,
     alertCount: result.summary.alertCount,
-    errorCount: result.summary.errors.length
+    errorCount: result.summary.errors.length,
+    alerts: (result.summary.alerts ?? []).slice(0, 40).map((alert) => ({
+      id: alert.id,
+      title: alert.title
+    }))
   };
 }
 

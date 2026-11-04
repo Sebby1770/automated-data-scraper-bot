@@ -7,6 +7,9 @@
       "schedule": "*/5 * * * *"
     }
   ],
+  "rewrites": [
+    { "source": "/console", "destination": "/index.html" }
+  ],
   "functions": {
     "api/cron/scrape.ts": {
       "maxDuration": 60

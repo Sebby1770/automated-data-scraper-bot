@@ -2,7 +2,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/Sebby1770/automated-data-scraper-bot)
 [![CI](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Sebby1770/automated-data-scraper-bot/actions/workflows/ci.yml)
-![Version](https://img.shields.io/badge/version-0.11.0-teal)
+![Version](https://img.shields.io/badge/version-0.14.0-teal)
 ![Node](https://img.shields.io/badge/node-%3E%3D20-339933)
 
 Config-driven bot and visual dashboard for watching retail listings, housing feeds, stock quotes, and JSON APIs, then notifying you through Discord, Telegram, Slack, webhooks, or the macOS Messages app when a rule matches.
@@ -46,9 +46,11 @@ npm install
 npm run dev
 ```
 
-Then open:
+Then open the website:
 
 `http://localhost:5173`
+
+The console is at `http://localhost:5173/console`. After two runs it writes a sentence of alerts that arrived or left, and that sentence can be copied.
 
 Run the bot without the dashboard:
 
@@ -357,7 +359,7 @@ Build and run with Docker Compose:
 docker compose up --build
 ```
 
-Open `http://localhost:5173`.
+Open `http://localhost:5173` for the website, or `http://localhost:5173/console` for the dashboard.
 
 Optional Redis profile (for Upstash-compatible REST env vars):
 
@@ -429,7 +431,7 @@ Example response:
 {
   "ok": true,
   "data": {
-    "version": "0.11.0",
+    "version": "0.14.0",
     "uptime": 12.34
   }
 }

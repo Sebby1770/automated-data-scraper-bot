@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.14.0] - 2026-11-05
+
+### Added
+
+- Since last run writes one sentence, such as `Added Ceramic mug. Removed Old plate.`, and a button copies that sentence. The sentence stays on the page if the clipboard is unavailable.
+
+### Changed
+
+- Bumped package version to `0.14.0`.
+
+## [0.13.0] - 2026-11-04
+
+### Added
+
+- A website at `/` introduces the bot. The console stays at `/console`.
+
+### Changed
+
+- Bumped package version to `0.13.0`.
+
+## [0.12.0] - 2026-11-04
+
+### Added
+
+- Run history compares alert ids from the two most recent dashboard runs and lists titles that were added or removed since the previous run.
+
+### Changed
+
+- Bumped package version to `0.12.0`.
+
 ## [0.11.0] - 2026-11-04
 
 ### Added

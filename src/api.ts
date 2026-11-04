@@ -17,7 +17,7 @@ import { previewDashboardSource, type SourcePreview } from "./preview.js";
 import { testRuleInSandbox, type SandboxSampleType, type SandboxTestResult } from "./sandbox.js";
 import type { RuleConfig } from "./types.js";
 
-export const APP_VERSION = "0.11.0";
+export const APP_VERSION = "0.14.0";
 
 export interface HealthResponse {
   version: string;
